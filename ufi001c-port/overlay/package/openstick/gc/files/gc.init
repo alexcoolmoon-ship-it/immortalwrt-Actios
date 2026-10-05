@@ -1,0 +1,159 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2020-2022 HandsomeMod Project
+
+START=90
+STOP=30
+
+USE_PROCD=1
+PROG=/usr/bin/gc
+CONFIGFS=/sys/kernel/config
+ADBD_INIT=/etc/init.d/adbd
+ADB_FFS=/dev/usb-ffs/adb
+ROLE_PATH=/sys/class/udc/ci_hdrc.0/device/driver/ci_hdrc.0/role
+
+get_config() {
+	local option="$1"
+	local default="$2"
+	local value
+
+	value="$(uci -q get "gc.config.$option")"
+	if [ -n "$value" ]; then
+		echo "$value"
+	else
+		echo "$default"
+	fi
+}
+
+get_mode() {
+	get_config mode gadget
+}
+
+set_role() {
+	local role="$1"
+
+	[ -e "$ROLE_PATH" ] || return 1
+	[ -w "$ROLE_PATH" ] || return 1
+
+	echo "$role" > "$ROLE_PATH"
+}
+
+ensure_configfs() {
+	if ! grep -qs " $CONFIGFS " /proc/mounts; then
+		mount -t configfs none "$CONFIGFS"
+	fi
+}
+
+start_adbd() {
+	if [ "$(get_config adb 0)" -ne 1 ]; then
+		return 0
+	fi
+
+	mkdir -p "$ADB_FFS"
+	if ! grep -qs " $ADB_FFS " /proc/mounts; then
+		mount -t functionfs adb "$ADB_FFS" || return 1
+	fi
+
+	if [ -e "$ADBD_INIT" ]; then
+		"$ADBD_INIT" start
+		sleep 2
+	fi
+}
+
+stop_adbd() {
+	if [ -e "$ADBD_INIT" ]; then
+		"$ADBD_INIT" stop
+	fi
+
+	if grep -qs " $ADB_FFS " /proc/mounts; then
+		umount "$ADB_FFS"
+	fi
+}
+
+configure_gadget() {
+	local rndis mass mass_path serial hid ecm ncm acm printer midi
+
+	rndis=$(get_config rndis 0)
+	mass=$(get_config mass 0)
+	mass_path=$(get_config mass_path /)
+	serial=$(get_config serial 0)
+	hid=$(get_config hid 0)
+	ecm=$(get_config ecm 0)
+	ncm=$(get_config ncm 0)
+	acm=$(get_config acm 0)
+	printer=$(get_config printer 0)
+	midi=$(get_config midi 0)
+
+	ensure_configfs || return 1
+
+	gc -c
+	if [ "$ecm" -eq 1 ]; then
+		gc -a ecm
+	fi
+	if [ "$ncm" -eq 1 ]; then
+		gc -a ncm
+	fi
+	if [ "$rndis" -eq 1 ]; then
+		gc -a rndis
+	fi
+	if [ "$serial" -eq 1 ]; then
+		gc -a serial
+	fi
+	if [ "$hid" -eq 1 ]; then
+		gc -a hid
+	fi
+	if [ "$acm" -eq 1 ]; then
+		gc -a acm
+	fi
+	if [ "$printer" -eq 1 ]; then
+		gc -a printer
+	fi
+	if [ "$midi" -eq 1 ]; then
+		gc -a midi
+	fi
+	if [ "$mass" -eq 1 ]; then
+		gc -a mass "$mass_path"
+	fi
+	if [ "$(get_config adb 0)" -eq 1 ]; then
+		gc -a ffs
+		start_adbd || return 1
+	fi
+
+	gc -e
+}
+
+apply_gadget_mode() {
+	set_role gadget || return 1
+
+	if [ "$(get_config enabled 0)" -ne 1 ]; then
+		return 0
+	fi
+
+	configure_gadget
+}
+
+apply_host_mode() {
+	stop_service
+	set_role host
+}
+
+start_service() {
+	case "$(get_mode)" in
+		host)
+			apply_host_mode
+			;;
+		*)
+			apply_gadget_mode
+			;;
+	esac
+}
+
+stop_service() {
+	stop_adbd
+	gc -d
+	gc -c
+}
+
+restart() {
+	stop
+	start
+}

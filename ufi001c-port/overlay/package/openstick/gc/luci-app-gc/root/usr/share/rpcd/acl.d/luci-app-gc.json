@@ -1,0 +1,14 @@
+{
+  "luci-app-gc": {
+    "description": "Grant LuCI access for gc",
+    "read": {
+      "uci": [ "gc" ]
+    },
+    "write": {
+      "uci": [ "gc" ],
+      "ubus": {
+        "rc": [ "init" ]
+      }
+    }
+  }
+}

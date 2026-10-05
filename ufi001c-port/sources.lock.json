@@ -1,0 +1,10 @@
+{
+  "openwrt_version": "25.12.5",
+  "openwrt_commit": "f0a60eee2fe051741c643ea6118718aae1ef17fb",
+  "board_support_commit": "7fe583d96eabe34efdc2f764a6f413a56e687eca",
+  "openstick_feed_commit": "aad1101996580eb8b62ab7a95c8a224dbbf1d3fc",
+  "packages_commit": "5caa62e0bc9f7fb9b0c12a23267bceb7724214dd",
+  "luci_commit": "128a7812f4be233c5dd7f7466f534fd888785caf",
+  "mkbootimg_source": "https://raw.githubusercontent.com/aosp-mirror/platform_system_core/android-10.0.0_r47/mkbootimg/mkbootimg.py",
+  "mkbootimg_sha256": "4d87cfb5482efcd556008cfe563ae442a934acb7ef0df082d422307f26a120b7"
+}

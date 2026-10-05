@@ -1,0 +1,13 @@
+{
+  "admin/services/gc": {
+    "title": "USB 设备模式",
+    "order": 90,
+    "action": {
+      "type": "view",
+      "path": "gc/config"
+    },
+    "depends": {
+      "acl": [ "luci-app-gc" ]
+    }
+  }
+}

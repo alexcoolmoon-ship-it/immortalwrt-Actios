@@ -1,0 +1,12 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+. /lib/functions/uci-defaults.sh
+
+board_config_update
+case "$(board_name)" in
+	thwc,ufi001c)
+		ucidef_set_interface_lan "usb0"
+		;;
+esac
+board_config_flush
+exit 0

@@ -1,0 +1,12 @@
+{
+  "openstick-ufi001c-modem.bin": {
+    "bytes": 67108864,
+    "sha256": "c64997f87be2dc3253b8c75ad072d597ffaef564bf515ad7a3bed793b5f22b0a",
+    "source": "https://github.com/lkiuyu/qcom-firmware/blob/e64f8cfd2a3aabe58633609f33e23c5c9d00730e/openstick-ufi001c-modem.bin"
+  },
+  "openstick-ufi001c-nv.bin": {
+    "bytes": 29816,
+    "sha256": "f85a3aeadcc9a496493cfd505e11d0110d62ac5d7d7ef7a2a1950e375f2297e1",
+    "source": "https://github.com/lkiuyu/qcom-firmware/blob/e64f8cfd2a3aabe58633609f33e23c5c9d00730e/openstick-ufi001c-nv.bin"
+  }
+}

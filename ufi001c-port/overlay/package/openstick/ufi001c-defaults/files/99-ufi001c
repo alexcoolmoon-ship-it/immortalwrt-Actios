@@ -1,0 +1,64 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+
+[ "$(cat /tmp/sysinfo/board_name)" = "thwc,ufi001c" ] || exit 0
+[ -s /etc/ufi001c-wifi-key ] || exit 1
+wifi_key="$(cat /etc/ufi001c-wifi-key)"
+
+uci -q batch <<EOF
+set network.br_lan=device
+set network.br_lan.name='br-lan'
+set network.br_lan.type='bridge'
+delete network.br_lan.ports
+add_list network.br_lan.ports='usb0'
+set network.lan=interface
+set network.lan.device='br-lan'
+set network.lan.proto='static'
+set network.lan.ipaddr='192.168.1.1'
+set network.lan.netmask='255.255.255.0'
+set network.modem=interface
+set network.modem.proto='modemmanager'
+set network.modem.device='qcom-soc'
+set network.modem.iptype='ipv4v6'
+set network.modem.auto='0'
+set network.modem.autoconnect='1'
+set wireless.radio0=wifi-device
+set wireless.radio0.type='mac80211'
+set wireless.radio0.phy='phy0'
+set wireless.radio0.band='2g'
+set wireless.radio0.channel='1'
+set wireless.radio0.htmode='HT20'
+set wireless.radio0.disabled='0'
+set wireless.default_radio0=wifi-iface
+set wireless.default_radio0.device='radio0'
+set wireless.default_radio0.network='lan'
+set wireless.default_radio0.mode='ap'
+set wireless.default_radio0.ssid='OpenWrt-25-UFI001C'
+set wireless.default_radio0.encryption='psk2'
+set wireless.default_radio0.key='$wifi_key'
+set luci.main.lang='ru'
+set system.@system[0].hostname='OpenWrt-UFI001C'
+commit network
+commit wireless
+commit luci
+commit system
+EOF
+
+. /lib/functions.sh
+add_modem_to_wan() {
+	local name
+	config_get name "$1" name
+	[ "$name" = wan ] || return 0
+	uci -q del_list "firewall.$1.network=modem"
+	uci add_list "firewall.$1.network=modem"
+}
+config_load firewall
+config_foreach add_modem_to_wan zone
+uci commit firewall
+# No upstream binary target feed exists for this custom msm89xx port.
+# Keep the official aarch64_generic userspace feeds available.
+feeds=/etc/apk/repositories.d/distfeeds.list
+if [ -f "$feeds" ]; then
+	sed -i '\|/targets/msm89xx/|s|^|# Built locally: |' "$feeds"
+fi
+exit 0

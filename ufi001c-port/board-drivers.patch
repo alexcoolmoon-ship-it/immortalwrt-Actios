@@ -1,0 +1,140 @@
+diff --git a/package/kernel/linux/modules/netdevices.mk b/package/kernel/linux/modules/netdevices.mk
+index 61a9c69..f22994f 100644
+--- a/package/kernel/linux/modules/netdevices.mk
++++ b/package/kernel/linux/modules/netdevices.mk
+@@ -2266,6 +2266,37 @@ endef
+ $(eval $(call KernelPackage,mhi-wwan-mbim))
+ 
+ 
++define KernelPackage/rpmsg-wwan-ctrl
++  SUBMENU:=$(NETWORK_DEVICES_MENU)
++  TITLE:=RPMSG WWAN Control
++  DEPENDS:=@LINUX_6_1||LINUX_6_6||LINUX_6_12||LINUX_6_18 +kmod-wwan
++  KCONFIG:=CONFIG_RPMSG_WWAN_CTRL
++  FILES:=$(LINUX_DIR)/drivers/net/wwan/rpmsg_wwan_ctrl.ko
++  AUTOLOAD:=$(call AutoProbe,rpmsg_wwan_ctrl)
++endef
++
++define KernelPackage/rpmsg-wwan-ctrl/description
++ Driver for RPMSG WWAN Control
++ This exposes all modem control ports like AT, QMI that use RPMSG
++endef
++
++$(eval $(call KernelPackage,rpmsg-wwan-ctrl))
++
++define KernelPackage/bam-dmux
++  SUBMENU:=$(NETWORK_DEVICES_MENU)
++  TITLE:=Qualcomm BAM-DMUX WWAN network driver
++  DEPENDS:=@TARGET_msm89xx +kmod-wwan
++  KCONFIG:=CONFIG_QCOM_BAM_DMUX
++  FILES:=$(LINUX_DIR)/drivers/net/wwan/qcom_bam_dmux.ko
++  AUTOLOAD:=$(call AutoProbe,qcom_bam_dmux)
++endef
++
++define KernelPackage/bam-dmux/description
++  Kernel modules for Qualcomm BAM-DMUX WWAN interface
++endef
++
++$(eval $(call KernelPackage,bam-dmux))
++
+ define KernelPackage/mtk-t7xx
+   SUBMENU:=$(NETWORK_DEVICES_MENU)
+   TITLE:=MediaTek T7xx 5G modem
+@@ -2275,6 +2306,37 @@ define KernelPackage/mtk-t7xx
+   AUTOLOAD:=$(call AutoProbe,mtk_t7xx)
+ endef
+ 
++define KernelPackage/rpmsg-wwan-ctrl
++  SUBMENU:=$(NETWORK_DEVICES_MENU)
++  TITLE:=RPMSG WWAN Control
++  DEPENDS:=@LINUX_6_1||LINUX_6_6||LINUX_6_12||LINUX_6_18 +kmod-wwan
++  KCONFIG:=CONFIG_RPMSG_WWAN_CTRL
++  FILES:=$(LINUX_DIR)/drivers/net/wwan/rpmsg_wwan_ctrl.ko
++  AUTOLOAD:=$(call AutoProbe,rpmsg_wwan_ctrl)
++endef
++
++define KernelPackage/rpmsg-wwan-ctrl/description
++ Driver for RPMSG WWAN Control
++ This exposes all modem control ports like AT, QMI that use RPMSG
++endef
++
++$(eval $(call KernelPackage,rpmsg-wwan-ctrl))
++
++define KernelPackage/bam-dmux
++  SUBMENU:=$(NETWORK_DEVICES_MENU)
++  TITLE:=Qualcomm BAM-DMUX WWAN network driver
++  DEPENDS:=@TARGET_msm89xx +kmod-wwan
++  KCONFIG:=CONFIG_QCOM_BAM_DMUX
++  FILES:=$(LINUX_DIR)/drivers/net/wwan/qcom_bam_dmux.ko
++  AUTOLOAD:=$(call AutoProbe,qcom_bam_dmux)
++endef
++
++define KernelPackage/bam-dmux/description
++  Kernel modules for Qualcomm BAM-DMUX WWAN interface
++endef
++
++$(eval $(call KernelPackage,bam-dmux))
++
+ define KernelPackage/mtk-t7xx/description
+  Driver for MediaTek PCIe 5G WWAN modem T7xx device
+ endef
+diff --git a/package/kernel/mac80211/ath.mk b/package/kernel/mac80211/ath.mk
+index 9adb891..aa1668e 100644
+--- a/package/kernel/mac80211/ath.mk
++++ b/package/kernel/mac80211/ath.mk
+@@ -1,6 +1,6 @@
+ PKG_DRIVERS += \
+ 	ath ath5k ath6kl ath6kl-sdio ath6kl-usb ath9k ath9k-common ath9k-htc ath10k ath10k-smallbuffers \
+-	ath11k ath11k-ahb ath11k-pci ath12k carl9170 owl-loader ar5523 wil6210 qcom-qmi-helpers
++	ath11k ath11k-ahb ath11k-pci ath12k carl9170 owl-loader ar5523 wil6210 wcn36xx qcom-qmi-helpers
+ 
+ PKG_CONFIG_DEPENDS += \
+ 	CONFIG_PACKAGE_ATH_DEBUG \
+@@ -26,7 +26,8 @@ ifdef CONFIG_PACKAGE_MAC80211_DEBUGFS
+ 	CARL9170_DEBUGFS \
+ 	ATH5K_DEBUG \
+ 	ATH6KL_DEBUG \
+-	WIL6210_DEBUGFS
++	WIL6210_DEBUGFS \
++	WCN36XX_DEBUGFS
+ endif
+ 
+ ifdef CONFIG_PACKAGE_MAC80211_TRACING
+@@ -51,6 +52,7 @@ config-$(call config_package,ath9k-common) += ATH9K_COMMON
+ config-$(call config_package,owl-loader) += ATH9K_PCI_NO_EEPROM
+ config-$(CONFIG_TARGET_ath79) += ATH9K_AHB
+ config-$(CONFIG_TARGET_ipq40xx) += ATH10K_AHB
++config-$(call config_package,wcn36xx) += WCN36XX
+ config-$(CONFIG_PCI) += ATH9K_PCI
+ config-$(CONFIG_ATH_USER_REGD) += ATH_USER_REGD ATH_REG_DYNAMIC_USER_REG_HINTS
+ config-$(CONFIG_ATH9K_HWRNG) += ATH9K_HWRNG
+@@ -142,7 +144,7 @@ endef
+ define KernelPackage/ath
+   $(call KernelPackage/mac80211/Default)
+   TITLE:=Atheros common driver part
+-  DEPENDS+= @PCI_SUPPORT||USB_SUPPORT||TARGET_ath79 +kmod-mac80211
++  DEPENDS+= @PCI_SUPPORT||USB_SUPPORT||TARGET_ath79||TARGET_msm89xx +kmod-mac80211
+   FILES:=$(PKG_BUILD_DIR)/drivers/net/wireless/ath/ath.ko
+   MENU:=1
+ endef
+@@ -364,6 +366,20 @@ This module adds support for Qualcomm Technologies 802.11ax family of
+ chipsets with PCI bus.
+ endef
+ 
++define KernelPackage/wcn36xx
++  $(call KernelPackage/mac80211/Default)
++  TITLE:=Qualcomm Atheros WCN3660/3680 support
++  URL:=https://wireless.wiki.kernel.org/en/users/drivers/wcn36xx
++  DEPENDS+= @TARGET_msm89xx +kmod-ath +kmod-qcom-rproc-wcnss
++  FILES:=$(PKG_BUILD_DIR)/drivers/net/wireless/ath/wcn36xx/wcn36xx.ko
++  AUTOLOAD:=$(call AutoProbe,wcn36xx)
++endef
++
++define KernelPackage/wcn36xx/description
++This module adds support for Qualcomm Atheros WCN3660/3680 Wireless
++blocks in some Qualcomm SoCs
++endef
++
+ define KernelPackage/ath12k
+   $(call KernelPackage/mac80211/Default)
+   TITLE:=Qualcomm 802.11be wireless chipset support
