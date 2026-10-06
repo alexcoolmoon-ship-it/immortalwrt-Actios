@@ -26,6 +26,7 @@ jobs:
           cd "$RUNNER_TEMP/openwrt"
           ./scripts/feeds update -a
           ./scripts/feeds install -a
+          cp ufi001c.config .config
           make defconfig
           python3 "$GITHUB_WORKSPACE/ufi001c-port/check_config.py" .config
       - name: Download sources
