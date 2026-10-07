@@ -13,7 +13,7 @@ define Device/openstick-ufi001c
   DEVICE_MODEL := OpenStick UFI001C
   DEVICE_DTS := msm8916-thwc-ufi001c
   DEVICE_DTS_DIR := ../dts
-  DEVICE_PACKAGES := ufi001c-defaults wpad-basic-mbedtls qcom-msm8916-modem-openstick-ufi001c-firmware qcom-msm8916-openstick-ufi001c-wcnss-firmware qcom-msm8916-wcnss-openstick-ufi001c-nv
+  DEVICE_PACKAGES := ufi001c-defaults wpad-basic-mbedtls ufi001c-radio qcom-msm8916-openstick-ufi001c-wcnss-firmware qcom-msm8916-wcnss-openstick-ufi001c-nv
 endef
 TARGET_DEVICES += openstick-ufi001c
 

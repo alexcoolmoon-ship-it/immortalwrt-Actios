@@ -52,6 +52,6 @@ keyfile.chmod(0o600)
     "LuCI: http://192.168.1.1/\n"
     "Username: root\n"
     "Initial administrator password: empty; set it after signing in.\n"
-    "The mobile interface is initially disabled; enter your carrier APN and enable it.\n"
+    "Mobile APN defaults to internet (IPv4); adjust for your carrier if needed.\n"
 )
 print(f"Prepared OpenWrt {lock['openwrt_version']} at {root}")
