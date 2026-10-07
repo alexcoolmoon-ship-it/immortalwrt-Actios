@@ -1,0 +1,2 @@
+config main 'main'
+    option allow_station '0'

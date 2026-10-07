@@ -8,5 +8,11 @@
     "bytes": 29816,
     "sha256": "f85a3aeadcc9a496493cfd505e11d0110d62ac5d7d7ef7a2a1950e375f2297e1",
     "source": "https://github.com/lkiuyu/qcom-firmware/blob/e64f8cfd2a3aabe58633609f33e23c5c9d00730e/openstick-ufi001c-nv.bin"
+  },
+  "ufi001bc-20211121.tar.gz": {
+    "source": "own stock modem firmware; LTE confirmed working on this unit",
+    "sha256": "5e9998604596f7ad393592bd9c71fd3740b1dcb2c0fe775b471dd9b258fbe043",
+    "bytes": 27729545,
+    "contains": "mba.mbn and modem.* only; no modemst/fsg/fsc"
   }
 }

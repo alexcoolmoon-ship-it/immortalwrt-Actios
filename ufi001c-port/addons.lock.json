@@ -1,0 +1,14 @@
+{
+  "podkop": {
+    "tag": "0.7.23",
+    "source": "https://github.com/itdoginfo/podkop",
+    "source_archive_sha256": "8dd41e9b093639e02f67fa5b852ad859b517c665d8a4734f8e125fd0a268eadf"
+  },
+  "zapret": {
+    "tag": "v72.13",
+    "source": "https://github.com/bol-van/zapret",
+    "asset": "zapret-v72.13-openwrt-embedded.tar.gz",
+    "sha256": "b2a9f454523264899e0e7ba19c662e59e29fb20ebb354aa3631cd76885f4c2e6"
+  },
+  "sing-box": "1.12.17, pinned packages feed; full only"
+}

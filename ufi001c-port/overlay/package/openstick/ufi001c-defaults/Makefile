@@ -2,7 +2,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=ufi001c-defaults
-PKG_VERSION:=1
+PKG_VERSION:=2
 PKG_RELEASE:=1
 
 include $(INCLUDE_DIR)/package.mk
@@ -20,7 +20,7 @@ endef
 
 define Package/ufi001c-defaults/install
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
-	$(INSTALL_BIN) ./files/99-ufi001c $(1)/etc/uci-defaults/99-ufi001c
+	$(INSTALL_BIN) ./files/99-ufi001c* $(1)/etc/uci-defaults/
 endef
 
 $(eval $(call BuildPackage,ufi001c-defaults))

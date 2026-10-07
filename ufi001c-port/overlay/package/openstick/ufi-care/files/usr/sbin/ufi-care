@@ -1,0 +1,147 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# UFI001C: saved-settings recovery for an ext4 rootfs, not firstboot/erase.
+set -u
+SNAP=/etc/ufi-care/recovery
+SELF=/usr/sbin/ufi-care
+log() { logger -t ufi-care "$*"; }
+die() { echo "ERROR: $*" >&2; log "ERROR: $*"; exit 1; }
+board_check() {
+    [ "$(uname -m)" = aarch64 ] || die 'Only aarch64 UFI001C supported'
+    tr '\000' '\n' </sys/firmware/devicetree/base/compatible | grep -qx 'thwc,ufi001c' || die 'Wrong board'
+}
+ap_up() {
+    local obj
+    for obj in $(ubus -t 3 list 'hostapd.*' 2>/dev/null); do
+        [ "$(ubus -t 3 call "$obj" get_status 2>/dev/null | jsonfilter -e '@.status')" = ENABLED ] && return 0
+    done
+    return 1
+}
+verify_snapshot() {
+    [ -f "$SNAP/COMPLETE" ] && [ -s "$SNAP/SHA256SUMS" ] &&
+        (cd "$SNAP" && sha256sum -c SHA256SUMS >/dev/null 2>&1)
+}
+snapshot() {
+    verify_snapshot && { echo 'Recovery snapshot already verified; keeping it.'; return 0; }
+    [ ! -e "$SNAP" ] || die 'Existing snapshot invalid; it was not overwritten'
+    ap_up || die 'No working access point; connect to modem Wi-Fi before installing'
+    local tmp f
+    umask 077
+    mkdir -p /etc/ufi-care
+    tmp="/etc/ufi-care/recovery.new.$$"
+    mkdir "$tmp" || return 1
+    for f in network wireless dhcp firewall; do
+        [ -s "/etc/config/$f" ] || { rm -rf "$tmp"; die "Missing config $f"; }
+    done
+    cp -pR /etc/config "$tmp/config" || { rm -rf "$tmp"; return 1; }
+    (cd "$tmp" && find config -type f -exec sha256sum '{}' \; >SHA256SUMS && sha256sum -c SHA256SUMS >/dev/null) || { rm -rf "$tmp"; return 1; }
+    date >"$tmp/COMPLETE"
+    mv "$tmp" "$SNAP" || return 1
+    log 'Saved known-good settings. Button: 8s network, 20s saved settings, on release.'
+}
+recover() {
+    local mode="$1" svc f
+    verify_snapshot || die 'Recovery snapshot is missing/corrupt; nothing restored'
+    mkdir /tmp/ufi-care-recover.lock 2>/dev/null || return 0
+    trap 'rmdir /tmp/ufi-care-recover.lock 2>/dev/null || true' EXIT
+    log "Restoring saved $mode settings"
+    for svc in podkop sing-box zapret https-dns-proxy nextdns; do
+        [ -x "/etc/init.d/$svc" ] || continue
+        "/etc/init.d/$svc" stop >/dev/null 2>&1 || true
+        "/etc/init.d/$svc" disable >/dev/null 2>&1 || true
+    done
+    if [ "$mode" = settings ]; then
+        for f in "$SNAP"/config/*; do
+            [ -f "$f" ] || continue
+            uci -q revert "${f##*/}" || true
+            cp -p "$f" "/etc/config/${f##*/}" || die 'Copy failed'
+        done
+    else
+        for f in network wireless dhcp firewall; do
+            uci -q revert "$f" || true
+            cp -p "$SNAP/config/$f" "/etc/config/$f" || die 'Copy failed'
+        done
+    fi
+    uci -q set ufi-care.main.allow_station=0 || true
+    uci -q commit ufi-care || true
+    sync
+    /etc/init.d/network restart
+    /etc/init.d/firewall restart
+    /etc/init.d/dnsmasq restart
+    log 'Saved settings restored; reconnect to saved modem Wi-Fi'
+}
+find_button() {
+    local p
+    for p in /sys/class/input/event*/device/name; do
+        [ -f "$p" ] || continue
+        [ "$(cat "$p")" = 'GPIO Buttons' ] || continue
+        p="${p%/device/name}"
+        [ -c "/dev/input/${p##*/}" ] || continue
+        echo "/dev/input/${p##*/}"; return 0
+    done
+    return 1
+}
+seconds() { cut -d. -f1 /proc/uptime; }
+button() {
+    local dev event stamp kind code value started='' held
+    [ ! -d /sys/module/button_hotplug ] || die 'button_hotplug already owns button'
+    dev="$(find_button)" || die 'GPIO Buttons evdev device not found'
+    log "Reading reset button at $dev; short press only logs"
+    exec 3<"$dev"
+    while :; do
+        # aarch64 struct input_event: timeval(16), type(2), code(2), value(4).
+        event="$(dd bs=24 count=1 <&3 2>/dev/null | hexdump -v -e '16/1 "%02x" " " 2/2 "%u " " " 1/4 "%u\n"')"
+        [ -n "$event" ] || die 'Button stream ended'
+        read -r stamp kind code value <<EOF
+$event
+EOF
+        [ "$kind" = 1 ] && [ "$code" = 408 ] || continue
+        case "$value" in
+            1) started="$(seconds)" ;;
+            0)
+                [ -n "$started" ] || continue
+                held=$(($(seconds) - started)); started=''
+                log "Reset button released after ${held}s"
+                if [ "$held" -ge 20 ]; then "$SELF" recover settings
+                elif [ "$held" -ge 8 ]; then "$SELF" recover network
+                fi ;;
+        esac
+    done
+}
+guard() {
+    local tries=0 lost=0
+    while ! verify_snapshot; do
+        if ap_up; then snapshot && break; fi
+        tries=$((tries + 1)); [ "$tries" -lt 12 ] || die 'Cannot create initial recovery snapshot'
+        sleep 5
+    done
+    sleep 90
+    while :; do
+        if [ "$(uci -q get ufi-care.main.allow_station)" = 1 ] || ap_up; then
+            lost=0
+        else
+            lost=$((lost + 15))
+            if [ "$lost" -ge 120 ]; then
+                log 'Access point absent for 120s; restoring known-good network'
+                "$SELF" recover network
+                lost=0
+                sleep 90
+            fi
+        fi
+        sleep 15
+    done
+}
+board_check
+case "${1:-status}" in
+    snapshot) snapshot ;;
+    guard) guard ;;
+    button) button ;;
+    recover)
+        case "${2:-network}" in network|settings) recover "${2:-network}" ;; *) die 'Unknown recovery mode' ;; esac ;;
+    status)
+        if verify_snapshot; then echo 'Recovery snapshot: VERIFIED'; else echo 'Recovery snapshot: MISSING/INVALID'; fi
+        if ap_up; then echo 'Access point: ENABLED'; else echo 'Access point: not enabled'; fi
+        printf 'Button device: '; find_button || true
+        logread -e ufi-care | tail -15 ;;
+    *) die 'Usage: ufi-care status|snapshot|recover network|recover settings' ;;
+esac

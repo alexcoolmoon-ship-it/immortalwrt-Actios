@@ -1,17 +1,14 @@
-# Проверка проекта на 2026-10-05
+# Validation boundary
 
-Подготовлен порт официальных исходников OpenWrt 25.12.5 для UFI001C.
-Готовых образов прошивки в исходном архиве нет.
+OpenWrt f0a60eee2fe051741c643ea6118718aae1ef17fb (25.12.5).
+Feeds: sources.lock.json; applications: addons.lock.json.
 
-- Ревизии OpenWrt, поддержки платы и feeds закреплены в sources.lock.json.
-- make defconfig и check_config.py успешно выполнены в предыдущей среде сборки.
-- Проверены SHA-256 двух firmware-файлов именно UFI001C.
-- Локально были собраны служебные инструменты и начата сборка toolchain.
-- Временная среда затем была очищена; промежуточная компиляция недоступна.
-- Для полной сборки подготовлен отдельный GitHub Actions workflow.
-- Синтаксис Python, shell и YAML проверен.
-- Готовые образы должны пройти collect.py; загрузка, Wi-Fi и LTE на физическом устройстве ещё не проверялись.
+Local validation: shell/Python syntax; required-package selection with make
+defconfig and check_config.py; no recursive Kconfig dependencies; checksums
+of radio archive and every radio file; ARM64 identity of official zapret
+binaries; synthetic evdev records; migration sparse/boot/layout rejection tests.
 
-Это не официальный образ OpenWrt для UFI001C, а отдельный порт OpenWrt 25.12.5.
-Он рассчитан на уже установленную разметку OpenStick: boot — раздел 12,
-rootfs — раздел 14. Для заводской Android-разметки образ не предназначен.
+No full v2 compilation, physical GPIO test, EDL write, DoH or bypass test was
+performed. The user's confirmed LTE success used exactly the included radio.
+The updater only supports the known OpenStick layout; stock GPT/bootloader
+conversion is refused before writes. Backup is read-only.

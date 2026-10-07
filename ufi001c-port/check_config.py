@@ -12,7 +12,7 @@ required = [
     "PACKAGE_kmod-qcom-rproc-modem",
     "PACKAGE_kmod-bam-dmux",
     "PACKAGE_kmod-rpmsg-wwan-ctrl",
-    "PACKAGE_qcom-msm8916-modem-openstick-ufi001c-firmware",
+    "PACKAGE_ufi001c-radio",
     "PACKAGE_qcom-msm8916-openstick-ufi001c-wcnss-firmware",
     "PACKAGE_qcom-msm8916-wcnss-openstick-ufi001c-nv",
     "PACKAGE_luci-i18n-base-ru",
@@ -23,6 +23,20 @@ required = [
     "PACKAGE_qrtr-ns",
     "PACKAGE_gc",
     "PACKAGE_ufi001c-defaults",
+    "PACKAGE_ufi-care",
+    "PACKAGE_podkop",
+    "PACKAGE_luci-app-podkop",
+    "PACKAGE_luci-i18n-podkop-ru",
+    "PACKAGE_sing-box",
+    "PACKAGE_zapret-ufi",
+    "PACKAGE_qmi-utils",
+    "PACKAGE_kmod-nft-tproxy",
+    "PACKAGE_kmod-nft-socket",
+    "PACKAGE_kmod-nft-queue",
+    "PACKAGE_kmod-nfnetlink-queue",
+    "PACKAGE_kmod-tun",
+    "PACKAGE_kmod-inet-diag",
+
 ]
 missing = [name for name in required if f"CONFIG_{name}=y\n" not in text]
 if missing:

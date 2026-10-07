@@ -1,0 +1,26 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+[ "$(cat /tmp/sysinfo/board_name)" = 'thwc,ufi001c' ] || exit 0
+uci -q batch <<'EOF'
+set podkop.settings.dns_type='doh'
+set podkop.settings.dns_server='1.1.1.1'
+set podkop.settings.bootstrap_dns_server='1.1.1.1'
+set podkop.settings.enable_yacd='0'
+set podkop.settings.enable_badwan_interface_monitoring='1'
+delete podkop.settings.badwan_monitored_interfaces
+add_list podkop.settings.badwan_monitored_interfaces='modem'
+add_list podkop.settings.badwan_monitored_interfaces='wwan'
+delete podkop.main
+set podkop.dns_only=section
+set podkop.dns_only.connection_type='proxy'
+set podkop.dns_only.proxy_config_type='outbound'
+set podkop.dns_only.outbound_json='{"type":"direct"}'
+set firewall.@defaults[0].flow_offloading='0'
+set firewall.@defaults[0].flow_offloading_hw='0'
+commit podkop
+commit firewall
+EOF
+/etc/init.d/zapret disable
+/etc/init.d/ufi-care enable
+/etc/init.d/podkop enable
+exit 0
