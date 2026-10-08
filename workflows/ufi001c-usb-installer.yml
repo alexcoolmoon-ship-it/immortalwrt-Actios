@@ -1,0 +1,26 @@
+name: Build UFI001C USB installer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout installer sources
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Test without accessing hardware
+        run: python3 -m unittest discover -s ufi001c-port/tests -v
+      - name: Package Windows launcher and stock base
+        run: python3 ufi001c-port/migration/package_stock.py "$RUNNER_TEMP/UFI001C-USB-installer"
+      - name: Save installer (firmware selected separately)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: UFI001C-USB-installer-3.0-rc1
+          path: ${{ runner.temp }}/UFI001C-USB-installer/
+          if-no-files-found: error
+          retention-days: 90

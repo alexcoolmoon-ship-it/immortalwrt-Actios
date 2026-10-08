@@ -6,6 +6,8 @@ import secrets
 import shutil
 import subprocess
 from pathlib import Path
+from prepare_engine import prepare as prepare_engine
+from check_radio_source import verify as verify_radio
 
 here = Path(__file__).resolve().parent
 args = argparse.ArgumentParser()
@@ -13,6 +15,7 @@ args.add_argument("directory", type=Path)
 opts = args.parse_args()
 root = opts.directory.resolve()
 lock = json.loads((here / "sources.lock.json").read_text())
+verify_radio()
 
 def run(*cmd):
     return subprocess.run(cmd, cwd=root, check=True)
@@ -36,6 +39,7 @@ if check.returncode == 0:
 else:
     run("git", "apply", "--reverse", "--check", patch)
 shutil.copytree(here / "overlay", root, dirs_exist_ok=True)
+prepare_engine(root)
 shutil.copy2(here / "feeds.conf", root / "feeds.conf")
 shutil.copy2(root / "ufi001c.config", root / ".config")
 # Force package metadata to include the newly added driver definitions.

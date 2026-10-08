@@ -1,0 +1,93 @@
+#!/bin/sh /etc/rc.common
+
+USE_PROCD=1
+START=99
+
+script=$(readlink "$initscript")
+NAME="$(basename ${script:-$initscript})"
+PROG="/usr/bin/sing-box"
+
+start_service() {
+	config_load "$NAME"
+
+	local enabled user group conffile workdir ifaces
+	config_get_bool enabled "main" "enabled" "0"
+	[ "$enabled" -eq "1" ] || return 0
+
+	config_get user "main" "user" "root"
+	config_get conffile "main" "conffile"
+	config_get ifaces "main" "ifaces"
+	config_get workdir "main" "workdir" "/usr/share/sing-box"
+
+	mkdir -p "$workdir"
+	local group="$(id -ng $user)"
+	chown $user:$group "$workdir"
+
+	procd_open_instance "$NAME.main"
+	# podkop-engine: colors would be escape codes in the system log
+	procd_set_param command "$PROG" run -c "$conffile" -D "$workdir" --disable-color
+
+	# Use root user if you want to use the TUN mode.
+	procd_set_param user "$user"
+	procd_set_param file "$conffile"
+	[ -z "$ifaces" ] || procd_set_param netdev $ifaces
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	# podkop-engine: procd's default threshold of an hour makes six crashes hours apart a
+	# crash loop that stops the service for good; only crashes less than 10 minutes
+	# apart count, as the failsafe counts them
+	procd_set_param respawn 600 5 5
+	# podkop-engine: the default limit of 4096 descriptors runs out at some 2000 proxied
+	# connections, then DNS queries fail for want of a socket; and procd kills a service
+	# 5 s after asking it to stop, while sing-box takes up to 10 s to close its connections
+	procd_set_param limits nofile="65536 65536"
+	procd_set_param term_timeout 15
+	# podkop-engine additions, only when podkop is installed
+	local env="" dns_fallback
+	if [ -x /usr/bin/podkop ]; then
+		# once remote rule-sets that failed at start are downloaded,
+		# re-run podkop list_update (its own lists would still be missing)
+		env="SING_BOX_RULESET_RECOVERED_HOOK=/usr/libexec/podkop-engine/lists-recovered"
+		# when a DNS server reached directly through the WAN fails, answer from the provider's
+		# DNS (sing-box takes it from netifd over ubus; any value turns the fallback on)
+		config_get_bool dns_fallback "main" "dns_fallback" "0"
+		[ "$dns_fallback" -eq 1 ] && env="$env SING_BOX_DNS_FALLBACK=ubus"
+	fi
+	# before a urltest group switches to a member, 64 KiB are downloaded through it: a
+	# server frozen after ~16 KB passes the usual small test, not this one
+	local download_check download_url
+	config_get_bool download_check "main" "urltest_download_check" "1"
+	config_get download_url "main" "urltest_download_url" "https://speed.cloudflare.com/__down?bytes=65536"
+	[ "$download_check" -eq 1 ] && [ -n "$download_url" ] && env="$env SING_BOX_URLTEST_DOWNLOAD_URL=$download_url"
+	# sing-box keeps the Go memory limit at the memory the system can still give; a size
+	# here (such as 64MiB) replaces it, off removes it. Go stops at start on a malformed
+	# GOMEMLIMIT, so a value it would not take is left out
+	local memory_limit
+	config_get memory_limit "main" "memory_limit"
+	if [ -n "$memory_limit" ]; then
+		if echo "$memory_limit" | grep -qE '^(off|[0-9]+(B|KiB|MiB|GiB|TiB)?)$'; then
+			env="$env GOMEMLIMIT=$memory_limit"
+		else
+			logger -t sing-box "memory_limit '$memory_limit' ignored: use off or a size such as 64MiB"
+		fi
+	fi
+	if [ -n "$env" ]; then
+		set -f # no pathname expansion of the URL
+		procd_set_param env $env
+		set +f
+	fi
+
+	procd_close_instance
+}
+
+service_triggers() {
+	local ifaces
+	config_load "$NAME"
+	config_get ifaces "main" "ifaces"
+	procd_open_trigger
+	for iface in $ifaces; do
+		procd_add_interface_trigger "interface.*.up" $iface /etc/init.d/$NAME restart
+	done
+	procd_close_trigger
+	procd_add_reload_trigger "$NAME"
+}

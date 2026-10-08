@@ -10,5 +10,30 @@
     "asset": "zapret-v72.13-openwrt-embedded.tar.gz",
     "sha256": "b2a9f454523264899e0e7ba19c662e59e29fb20ebb354aa3631cd76885f4c2e6"
   },
-  "sing-box": "1.12.17, pinned packages feed; full only"
+  "podkop-engine": {
+    "version": "1.13.21-r12",
+    "source": "https://github.com/FiyeroT/podkop-engine",
+    "tag": "v1.13.21-r12",
+    "commit": "46e23704bbee712b192ec7d519ad906b727f1c0e",
+    "source_archive_sha256": "1b9dd724d97249082a81c2f219f6a75867c624680ca20739216d92d9bf1e3023",
+    "sing_box_source_sha256": "c994018d7c2a8fc9fcf6080e4b9cc4f2f915e755342238b77e46fc0806fe96db",
+    "patches_archive_sha256": "fe2789fe4373a1cb28305f729626e29ead398494a5fe79c94f2ab6cd79c07bac",
+    "patches_count": 86,
+    "package_variant": "main (podkop_slim, with_quic, with_utls, with_clash_api)",
+    "expected_version": "1.13.21-pdk-r12",
+    "required_features": [
+      "tools.decode-link",
+      "transport.xhttp"
+    ],
+    "dns_fallback_default": false
+  },
+  "golang": {
+    "version": "1.26.8",
+    "source": "https://github.com/openwrt/packages",
+    "commit": "f60a090afff932579d015045dd1eff9f744fa043",
+    "override_path": "lang/golang/golang1.26/Makefile",
+    "original_recipe_sha256": "9ecc0c5556b52fe340e1484a946b40e5ddd81f80120ef23225b0b61e12a20bf5",
+    "recipe_sha256": "1817e0467b871343b879d1d6070829974922e404fc830bd7d3cfdf3a68539548",
+    "source_sha256": "4e39b98e42f946fa05ac8bc5b71877df97dbdb7cbb1a777b541667ad7117fd2e"
+  }
 }

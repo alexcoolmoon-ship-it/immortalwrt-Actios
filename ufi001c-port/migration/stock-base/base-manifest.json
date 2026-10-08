@@ -1,0 +1,45 @@
+{
+  "source_commit": "7200f361ae19a001ffff5bb97cb6a89b353f0b35",
+  "source_repository": "https://github.com/x7780/immortalwrt-Actios",
+  "files": {
+    "aboot.bin": {
+      "bytes": 287488,
+      "sha256": "683f464ff0295d4663558db0d0d006eb4a982f0f7a6de93eb8df052a69bd456a",
+      "source": "https://raw.githubusercontent.com/x7780/immortalwrt-Actios/7200f361ae19a001ffff5bb97cb6a89b353f0b35/flashtool/rom/aboot.bin"
+    },
+    "gpt_both0.bin": {
+      "bytes": 34304,
+      "sha256": "fd046fb9171493e46e15fa3b8fdfdaa8ec6233b19b7e5151e5e166bcf425cc0f",
+      "source": "https://raw.githubusercontent.com/x7780/immortalwrt-Actios/7200f361ae19a001ffff5bb97cb6a89b353f0b35/flashtool/rom/gpt_both0.bin"
+    },
+    "hyp.mbn": {
+      "bytes": 12288,
+      "sha256": "0680b42298a7d691161e427543211f3ec528b21c901de6e5b13e833e772776cf",
+      "source": "https://raw.githubusercontent.com/x7780/immortalwrt-Actios/7200f361ae19a001ffff5bb97cb6a89b353f0b35/flashtool/rom/hyp.mbn"
+    },
+    "rpm.mbn": {
+      "bytes": 524288,
+      "sha256": "551beae07ab831204c8d8362d2344c37b03ba6bd590984eb44b7f560ee6b94b7",
+      "source": "https://raw.githubusercontent.com/x7780/immortalwrt-Actios/7200f361ae19a001ffff5bb97cb6a89b353f0b35/flashtool/rom/rpm.mbn"
+    },
+    "sbc_1.0_8016.bin": {
+      "bytes": 420,
+      "sha256": "5e2004e3b46d22a3b2b429271ff140ff77f8dd5c0816947579eca98243d69f31",
+      "source": "https://raw.githubusercontent.com/x7780/immortalwrt-Actios/7200f361ae19a001ffff5bb97cb6a89b353f0b35/flashtool/rom/sbc_1.0_8016.bin"
+    },
+    "sbl1.mbn": {
+      "bytes": 524288,
+      "sha256": "6565a3c61c0f7413f10f1027c7f9b085335aeaabc379338c37c57917ac90c4aa",
+      "source": "https://raw.githubusercontent.com/x7780/immortalwrt-Actios/7200f361ae19a001ffff5bb97cb6a89b353f0b35/flashtool/rom/sbl1.mbn"
+    },
+    "tz.mbn": {
+      "bytes": 605312,
+      "sha256": "2daaedaafeee5697b6d85aa329cc6af9bc7e661677e4594d75efb54e4b53fea1",
+      "source": "https://raw.githubusercontent.com/x7780/immortalwrt-Actios/7200f361ae19a001ffff5bb97cb6a89b353f0b35/flashtool/rom/tz.mbn"
+    }
+  },
+  "verified_identical_to": {
+    "url": "https://github.com/OpenStick/OpenStick/releases/download/v1/base.zip",
+    "zip_sha256": "967f9ea19740ec514aa18e9348c01afb24fde59f75cc8af1d18b00f261805034"
+  }
+}

@@ -1,23 +1,30 @@
-# UFI001C OpenWrt 25.12.5 — v2 source project
+# UFI001C OpenWrt 25.12.5 — v3 XHTTP (3.0-rc1)
 
-Read INSTALL-RU.md for Windows instructions and PROJECT-STATE.md for continuity.
-This is source, not compiled or hardware-tested firmware. Upload the archive's
-.github and ufi001c-port directories to the existing repository root; start a
-new workflow run on the new commit.
+Source project and Windows USB installer. This ZIP is not a compiled firmware
+image. Read INSTALL-RU.md. PROJECT-STATE.md records completed work and limits.
 
-Includes own confirmed-working UFI001BC 20211121 radio, Podkop 0.7.23 with
-DoH/direct defaults, sing-box 1.12.17, zapret 72.13 ARM64 (filtering disabled
-until ISP-specific testing), matching TPROXY/NFQUEUE modules, evdev reset
-button handler and AP recovery, and guarded EDL backup/update helper.
+The v2 image already booted on the user's modem, with working LTE. This revision
+replaces ordinary sing-box with **podkop-engine 1.13.21-r12**, using all 86 locked
+upstream patches and Go 1.26.8. Podkop 0.7.23 already understands the engine's
+XHTTP decoder. Both the feature check and the decoder remain enabled.
 
-Kconfig checks passed; full compilation, boot and physical button tests remain.
-Stock GPT/bootloader conversion is not automated. Updater refuses stock layouts.
+The build runs the resulting ARM64 executable under QEMU, checks XHTTP in four
+modes, extra/XMUX and DoH, and binds xhttp-validation.json to boot.img/system.img.
+An image without this gate cannot be packaged by the new stock installer.
 
-Build sequence: prepare.py, feeds update/install, finalize_feeds.py, copy
-ufi001c.config to .config, make defconfig, check_config.py, make download, make.
-Use the provided pinned workflow. Do not force-install foreign kernel modules.
+Included: working UFI001BC 20211121 radio; Podkop/DoH; zapret 72.13 (interception
+disabled pending carrier-specific strategy); matching TPROXY/NFQUEUE modules;
+ufi-care button/AP recovery; existing-layout updater 2.1; guarded stock installer
+3.0-rc1 with separate full backups, own NV transfer and readback verification.
 
-Radio firmware.part-* files are joined and checksum verified during the build.
-No per-device NV is included. Podkop GPL-2.0+, zapret MIT; upstream licenses are
-retained. Radio binaries come from the user's own stock firmware; this project
-is not a new license grant for those binaries.
+First stock conversion is USB/EDL through INSTALL.cmd, not factory web upload.
+The factory web update format/signature has not been established. The script
+supports only the verified 8 GB factory geometry and matching radio hash.
+RESTORE.cmd uses this physical device's full stock backup.
+
+Build with .github/workflows/openwrt25-ufi001c.yml. All base/feed/toolchain/engine
+revisions are pinned. The full v3 build and a real stock-unit installation are
+still required; offline checks do not establish hardware success.
+
+Radio blobs are from the user's own stock image; no per-device NV is included.
+See package licenses, ENGINE-SOURCES.md and migration/BASE-SOURCES.md.

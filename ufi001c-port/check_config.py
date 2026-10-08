@@ -27,7 +27,7 @@ required = [
     "PACKAGE_podkop",
     "PACKAGE_luci-app-podkop",
     "PACKAGE_luci-i18n-podkop-ru",
-    "PACKAGE_sing-box",
+    "PACKAGE_podkop-engine",
     "PACKAGE_zapret-ufi",
     "PACKAGE_qmi-utils",
     "PACKAGE_kmod-nft-tproxy",
@@ -43,4 +43,7 @@ if missing:
     raise SystemExit("Required settings missing: " + ", ".join(missing))
 if "CONFIG_TARGET_ROOTFS_SQUASHFS=y\n" in text:
     raise SystemExit("This first port requires ext4, not squashfs")
+for package in ('sing-box', 'sing-box-tiny', 'podkop-engine-full'):
+    if f'CONFIG_PACKAGE_{package}=y\n' in text:
+        raise SystemExit('Unexpected second engine provider: ' + package)
 print("UFI001C configuration checks passed")

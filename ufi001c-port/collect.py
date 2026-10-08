@@ -2,10 +2,12 @@
 """Collect and structurally validate fastboot images. This is not a boot test."""
 import gzip
 import hashlib
+import importlib.util
 import json
 import shutil
 import struct
 import sys
+import tempfile
 import zlib
 from pathlib import Path
 
@@ -95,6 +97,17 @@ report = {
     f"{hashlib.sha256((out / name).read_bytes()).hexdigest()}  {name}\n"
     for name in ("boot.img", "system.img")
 ))
+# Exercise the SAME parser/preparation path users will run in the EDL installer.
+# In particular, both images contain append-metadata/fwtool trailers.
+migration = Path(__file__).resolve().parent / 'migration'
+sys.path.insert(0, str(migration))
+spec = importlib.util.spec_from_file_location('ufi_installer', migration / 'ufi-install.py')
+installer = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(installer)
+with tempfile.TemporaryDirectory(prefix='image-check-', dir=out) as work:
+    installer.prepare_images(out, Path(work))
+report['installer_preflight'] = 'passed: ' + installer.INSTALLER_VERSION
+(out / 'validation.json').write_text(json.dumps(report, indent=2) + '\n')
 print(json.dumps(report, indent=2))
 
 # Keep selected modules from THIS build. Other targets' modules are not ABI-compatible.
