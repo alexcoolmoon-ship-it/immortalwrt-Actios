@@ -1,4 +1,4 @@
-name: OpenWrt 25.12.5 UFI001C v3 XHTTP
+name: OpenWrt 25.12.5 UFI001C v3.1.1 Routing
 
 on:
   workflow_dispatch:
@@ -21,8 +21,8 @@ jobs:
           sudo apt-get install -y build-essential clang flex bison g++ gawk \
             gettext git libncurses-dev libssl-dev python3 python3-setuptools \
             rsync swig unzip zlib1g-dev file wget curl cpio perl pkgconf \
-            mtools android-sdk-libsparse-utils zstd qemu-user
-      - name: Check installer without hardware
+            mtools android-sdk-libsparse-utils zstd qemu-user jq
+      - name: Check installer and network regressions
         run: python3 -m unittest discover -s ufi001c-port/tests -v
       - name: Prepare locked source and feeds
         run: |
@@ -47,12 +47,24 @@ jobs:
             ufi-v3-${{ runner.os }}-${{ hashFiles('ufi001c-port/sources.lock.json', 'ufi001c-port/addons.lock.json') }}-
       - name: Download sources
         working-directory: ${{ runner.temp }}/openwrt
-        run: make -j8 download
+        run: |
+          set -o pipefail
+          make -j8 download 2>&1 | tee download.log
+          # The aggregate download target can ignore individual failures.
+          # Check the four corrected OpenStick recipes explicitly.
+          for package in gc libusbgx qrtr rmtfs; do
+            make "package/openstick/$package/download" V=s 2>&1 | tee -a download.log
+          done
       - name: Compile firmware
         working-directory: ${{ runner.temp }}/openwrt
         run: |
           set -o pipefail
           make -j"$(nproc)" V=s 2>&1 | tee build.log
+      - name: Verify built kernel policy routing
+        run: |
+          set -o pipefail
+          python3 ufi001c-port/check_kernel.py "$RUNNER_TEMP/openwrt" | tee "$RUNNER_TEMP/kernel-routing-check.txt"
+          python3 ufi001c-port/check_rootfs.py "$RUNNER_TEMP/openwrt" | tee "$RUNNER_TEMP/routing-rootfs-check.json"
       - name: Collect and inspect images
         run: |
           python3 ufi001c-port/collect.py "$RUNNER_TEMP/openwrt" "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5"
@@ -60,11 +72,14 @@ jobs:
           cp ufi001c-port/addons.lock.json "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
           cp ufi001c-port/migration/ufi-install.py ufi001c-port/migration/radio_backup.py "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
           cp ufi001c-port/INSTALL-RU.md "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
+          cp ufi001c-port/VALIDATION-v3.1.1.md "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
+          cp "$RUNNER_TEMP/kernel-routing-check.txt" "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
+          cp "$RUNNER_TEMP/routing-rootfs-check.json" "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
           python3 ufi001c-port/migration/package_stock.py "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5"
       - name: Save firmware and access details
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: UFI001C-OpenWrt-25.12.5-v3-XHTTP
+          name: UFI001C-OpenWrt-25.12.5-v3.1.1-Routing
           path: ${{ runner.temp }}/UFI001C-OpenWrt-25.12.5/
           if-no-files-found: error
           retention-days: 14
@@ -76,4 +91,7 @@ jobs:
           path: |
             ${{ runner.temp }}/openwrt/build.log
             ${{ runner.temp }}/openwrt/config-check.log
+            ${{ runner.temp }}/openwrt/download.log
+            ${{ runner.temp }}/kernel-routing-check.txt
+            ${{ runner.temp }}/routing-rootfs-check.json
           if-no-files-found: ignore
