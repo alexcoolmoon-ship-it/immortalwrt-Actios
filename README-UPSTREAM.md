@@ -1,0 +1,162 @@
+# 高通410随身WiFi —— 在线云编译 OpenWrt
+
+经常遇见找不到好的固件，不是软件源不能安装，就是版本太老，要不就是别人固件装了自己不需要的插件功能。那就直接编译一个属于自己的openwrt刷机包，简单几步就可以完成编译，本地不需要装任何环境，不需要懂 Linux，不需要懂编译，编译好的固件包傻瓜化一键刷机。
+
+- 每次编译自动拉取 ImmortalWrt 官方最新源码
+- 想要什么插件自己填，编出来的固件完全是你决定
+- 底包极致优化，不用担心各种bug。
+- 支持自定义输入插件包，驱动包，主题包，python包，perl包，lib包，等等。
+---
+
+## 编译固件步骤
+
+1. 先把本仓库Fork到你自己账号下
+![拉流仓库](img/0.png)
+
+2. 手动触发编译：你的仓库 → **Actions** → **Build_imm_高通410系列** → **Run workflow** → 选择设备型号 → 填写需要插件包 → Run workflow 开始编译
+![编译教程](img/1.png)
+
+3. 编译约⏱️ 1.5-2 小时，插件越多时间越长.
+![编译过程](img/2.png)
+
+4. 上面出现绿色对号，就代表编译成功了，你的仓库 → **releases** → 下载固件包
+![下载固件包](img/3.png)
+
+5. 如果你原本系统是linux或openwrt系统，就可以按照下面步骤升级就行。
+![升级固件](img/4.png)
+
+如果你设备没刷过linux或者openwrt，还是原版安卓，就按下面教程刷入，注意必须备份分区。
+![安卓刷入openwrt固件](img/5.png)
+
+如果遇到手机卡插入设备不能用情况，多插拔几次，多次还是不识别手机卡，可以尝试以下步骤，你要是没备份安卓的分区，那就没办法了，在讨论区留言看看有没有好心人给你一份吧。
+![刷回固件](img/6.png)
+
+---
+
+### 推荐插件配置（可直接复制粘贴）
+
+- 基础：`luci-app-ttyd`
+- 科学上网：`luci-app-openclash`
+- 去广告：`luci-app-adbyby-plus,luci-app-adblock`
+- 常用组合：`luci-app-ttyd,luci-app-adbyby-plus,luci-app-accesscontrol`
+---
+## 支持的设备型号
+
+| 型号 | 说明 |
+|-----|------|
+| ufi003 | 默认，手里有这个板子，优化比较好 |
+| ufi001c | 已支持 |
+| ufi001b | 已支持 |
+| ufi103s | 已支持 |
+| qrzl903 | 已支持 |
+| w001 | 已支持 |
+| uz801 | 已支持 |
+| mf32 | 已支持  [另外一个库 - 安卓电池机破解](https://github.com/x7780/MF32T_MB_V01) |
+| mf601 | 已支持 |
+| wf2 | 已支持 |
+| jz02v10 | 已支持 |
+| sp970v11 | 已支持 |
+| sp970v10 | 已支持 |
+
+---
+
+## 项目目录与文件说明
+
+| 路径 | 用途说明 |
+|------|---------|
+| `config/` | 各设备型号的编译配置文件，文件名对应设备型号（如 `ufi003.config`） |
+| `files/` | 编译后覆盖到固件，全是系统配置文件，[files/www 更改首页指南请看这个仓库](https://github.com/x7780/suishen-wifi) |
+| `img/` | README 文档中使用的教程截图 |
+| `scripts/` | 编译过程中执行的辅助脚本 |
+| `工具与脚本/` | 刷机相关工具和辅助脚本合集，包括9008驱动，基带，完整的刷机脚本，等等 |
+| `刷机脚本/` | 编译成功后集成打包到一键刷机包里面 |
+| `diy-part1.sh` | 编译第一阶段自定义脚本，在拉取源码后执行（添加软件源、打补丁等） |
+| `diy-part2.sh` | 编译第二阶段自定义脚本，在生成默认配置后执行（修改配置、添加文件等） |
+| `upstream_history.txt` | 上游源码的更新hash历史记录，如果编译不了可以使用历史hash |
+| `upstream_lock.txt` | 定时更新记录上流可编译hash，避免上流乱改源码后导致编译失败 |
+| `极简的包名.txt` | 常用插件包名速查列表备份，没什么大用，备份参考用 |
+| `.config` | 默认编译配置文件，定义全局编译选项 |
+
+---
+
+### 已启用的默认插件（共3个）不要把这3个插件添加编辑固件里面。
+
+| 序号 | 插件 | 说明 | 菜单位置 |
+|-----|-----|------|---------|
+| 1 | luci-theme-argon  | argon主题插件 | 国内比较火的主题 |
+| 2 | luci-app-package-manager | 软件包管理 | 系统 → 软件包 |
+| 3 | luci-app-firewallr | 防火墙插件 | 系统 → 防火墙 |
+### 已启用的默认驱动模块，请不要重复添加。
+
+| 序号 | 插件 | 说明 | 菜单位置 |
+|-----|-----|------|---------|
+| 4 | kmod-usb-common | USB 公共模块 | 内核模块 |
+| 5 | kmod-usb-core | USB 核心模块 | 内核模块 |
+| 6 | kmod-usb-gadget | USB Gadget 框架 | 内核模块 |
+| 7 | kmod-usb-gadget-eth | USB Gadget 以太网 | 内核模块 |
+| 8 | kmod-usb-gadget-functionfs | USB Gadget FunctionFS | 内核模块 |
+| 9 | kmod-usb-gadget-mass-storage | USB Gadget 大容量存储 | 内核模块 |
+| 10 | kmod-usb-gadget-ncm | USB Gadget NCM 网络 | 内核模块 |
+| 11 | kmod-usb-gadget-serial | USB Gadget 串口 | 内核模块 |
+| 12 | kmod-usb-lib-composite | USB 复合设备库 | 内核模块 |
+| 13 | kmod-usb-net | USB 网络驱动 | 内核模块 |
+| 14 | kmod-usb-net-cdc-ether | USB CDC Ethernet 驱动 | 内核模块 |
+| 15 | kmod-usb-net-cdc-ncm | USB CDC NCM 驱动 | 内核模块 |
+| 16 | kmod-usb-net-huawei-cdc-ncm | 华为 CDC NCM 驱动 | 内核模块 |
+| 17 | kmod-usb-net-rndis | USB RNDIS 网络驱动 | 内核模块 |
+| 18 | kmod-usb-serial | USB 串口驱动 | 内核模块 |
+| 19 | kmod-usb-serial-option | USB 串口 Option 驱动 | 内核模块 |
+| 20 | kmod-usb-serial-wwan | USB 串口 WWAN 驱动 | 内核模块 |
+| 21 | kmod-usb-wdm | USB WDM 驱动 | 内核模块 |
+### 已添加第三方源码插件库。
+
+| 序号 | 地址 | 说明 | 使用方法 |
+|-----|-----|------|------|
+| 1 | https://github.com/kenzok8/small-package | 常用OpenWrt软件包源码合集 | 在编译时填写插件名 |
+---
+
+### 推荐好用的工具。
+
+| 序号 | 地址 | 说明 | 使用方法 |
+|-----|-----|------|------|
+| 1 | https://github.com/3899/SimAdmin | 非常好用的sim卡管理工具，作者还在陆续更新 | 进入后台-启动项-本地启动脚本 |
+| 2 | https://picoclaw.io/ | 不占内存的小龙虾，下载linux ARM64 (arm64) 版本解压到设备上| 进入后台-启动项-本地启动脚本 |
+| 3 | https://pumpkinmc.org/ | 我的世界服务端，运行速度非常快，占用内存小| openwrt需要自行编译版本 |
+---
+
+### 已禁用的内核调试信息
+
+减少固件体积约50-100MB：
+
+| 配置项 | 说明 | 状态 |
+|-------|------|------|
+| CONFIG_KERNEL_DEBUG_FS | 调试文件系统 | 禁用 太占内存 |
+| CONFIG_KERNEL_DEBUG_KERNEL | 内核调试日志 | 禁用 太占内存 |
+| CONFIG_KERNEL_DEBUG_INFO | 完整调试符号 | 禁用 太占内存 |
+| CONFIG_KERNEL_KALLSYMS | 内核符号表 | 禁用 太占内存 |
+
+---
+
+## 特别感谢
+
+- [xuxin1955/Actions-immortalwrt](https://github.com/xuxin1955/Actions-immortalwrt) 感谢作者提供技术
+- [lkiuyu/immortalwrt](https://github.com/lkiuyu/immortalwrt) 感谢作者对驱动和内核修正
+
+## Credits
+
+- [Microsoft Azure](https://azure.microsoft.com)
+- [GitHub Actions](https://github.com/features/actions)
+- [OpenWrt](https://github.com/openwrt/openwrt)
+- [ImmortalWrt](https://github.com/xuxin1955/immortalwrt)
+- [coolsnowwolf/lede](https://github.com/coolsnowwolf/lede)
+- [Mikubill/transfer](https://github.com/Mikubill/transfer)
+- [softprops/action-gh-release](https://github.com/softprops/action-gh-release)
+- [Mattraks/delete-workflow-runs](https://github.com/Mattraks/delete-workflow-runs)
+- [dev-drprasad/delete-older-releases](https://github.com/dev-drprasad/delete-older-releases)
+- [peter-evans/repository-dispatch](https://github.com/peter-evans/repository-dispatch)
+
+
+
+## License
+
+[MIT](https://github.com/P3TERX/Actions-OpenWrt/blob/main/LICENSE) © [**P3TERX**](https://p3terx.com)

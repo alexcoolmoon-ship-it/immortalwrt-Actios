@@ -1,162 +1,95 @@
-# 高通410随身WiFi —— 在线云编译 OpenWrt
+# UFI001C · персональная сборка alexcoolmoon-ship-it
 
-经常遇见找不到好的固件，不是软件源不能安装，就是版本太老，要不就是别人固件装了自己不需要的插件功能。那就直接编译一个属于自己的openwrt刷机包，简单几步就可以完成编译，本地不需要装任何环境，不需要懂 Linux，不需要懂编译，编译好的固件包傻瓜化一键刷机。
+**OpenWrt 25.12.5 · Podkop 0.7.23 · XHTTP · защищённый DNS через прокси**
 
-- 每次编译自动拉取 ImmortalWrt 官方最新源码
-- 想要什么插件自己填，编出来的固件完全是你决定
-- 底包极致优化，不用担心各种bug。
-- 支持自定义输入插件包，驱动包，主题包，python包，perl包，lib包，等等。
----
+Страница проекта для USB-модема UFI001C на MSM8916. Это персональная сборка,
+основанная на OpenWrt и OpenStick, с собственными настройками и установщиком.
+Она не является официальным выпуском проекта OpenWrt.
 
-## 编译固件步骤
+[Скачать прошивку — Releases](https://github.com/alexcoolmoon-ship-it/immortalwrt-Actios/releases)
+· [Инструкция](ufi001c-port/INSTALL-RU.md)
+· [Сборка — Actions](https://github.com/alexcoolmoon-ship-it/immortalwrt-Actios/actions/workflows/openwrt25-ufi001c.yml)
 
-1. 先把本仓库Fork到你自己账号下
-![拉流仓库](img/0.png)
+## Скачать и установить
 
-2. 手动触发编译：你的仓库 → **Actions** → **Build_imm_高通410系列** → **Run workflow** → 选择设备型号 → 填写需要插件包 → Run workflow 开始编译
-![编译教程](img/1.png)
+В Releases выбирайте **UFI001C-OpenWrt-25.12.5-v3.1.2-USB.zip** из Assets.
+Это один архив с прошивкой, установщиком, инструкцией и контрольными суммами.
+Ссылки **Source code** для прошивки не подходят. Если выпуска ещё нет,
+сначала запустите workflow **OpenWrt 25.12.5 UFI001C v3.1.2 Setup** и дождитесь Success.
 
-3. 编译约⏱️ 1.5-2 小时，插件越多时间越长.
-![编译过程](img/2.png)
+Для нового **стокового** модема на уже подготовленном Windows-ПК:
 
-4. 上面出现绿色对号，就代表编译成功了，你的仓库 → **releases** → 下载固件包
-![下载固件包](img/3.png)
+1. Распакуйте архив и запустите `UFI001C-USB/INSTALL.cmd`.
+2. Подключите один модем к USB с зажатой кнопкой, затем отпустите её.
+3. Дождитесь сохранения полного бэкапа и проверки совместимости.
+   Для начала записи введите предложенное программой `UFI001C`.
+4. После успешной проверки записи переподключите модем без кнопки.
+   Подключитесь к Wi-Fi из `ACCESS.txt` и откройте **http://192.168.1.1**.
 
-5. 如果你原本系统是linux或openwrt系统，就可以按照下面步骤升级就行。
-![升级固件](img/4.png)
+На новом ПК нужна однократная подготовка Python/EDL и USB-драйвера:
+[подробная инструкция](ufi001c-port/migration/README-STOCK-RU.md).
+Поддерживается точный заводской профиль UFI001C 8 ГБ с радио UFI001BC 20211121;
+другая разметка или радио отклоняются до записи. Внешнего сходства модемов недостаточно.
+Бэкап этого экземпляра сохраняется в `%USERPROFILE%\UFI001C-backups`.
 
-如果你设备没刷过linux或者openwrt，还是原版安卓，就按下面教程刷入，注意必须备份分区。
-![安卓刷入openwrt固件](img/5.png)
+**Если OpenWrt уже установлен**, используйте раздел обновления в
+[INSTALL-RU.md](ufi001c-port/INSTALL-RU.md). Стоковый установщик для него не подходит.
+Совместимость нашего архива с заводской веб-панелью не установлена; первая
+установка выполняется через USB/EDL.
 
-如果遇到手机卡插入设备不能用情况，多插拔几次，多次还是不识别手机卡，可以尝试以下步骤，你要是没备份安卓的分区，那就没办法了，在讨论区留言看看有没有好心人给你一份吧。
-![刷回固件](img/6.png)
+## Настроить Podkop
 
----
+Откройте **Службы → Podkop → Секции**, вставьте свою ссылку в готовую секцию
+или создайте новую. Имя секции произвольное. Сохраните, примените и запустите Podkop.
+Поле **Прокси для защищённого DNS** оставьте в положении **Автоматически**.
+XHTTP уже встроен. До ввода ссылки Podkop выключен; чужого прокси в образе нет.
 
-### 推荐插件配置（可直接复制粘贴）
+Основной DoH идёт через выбранный одиночный прокси. Прямой bootstrap DNS нужен
+для разрешения имени самого прокси. Прямые запросы к 1.1.1.1 не требуются для
+работы основного DNS. Поддерживаются одиночная URL-секция и JSON outbound;
+selector/urltest/VPN для этой функции пока не поддерживаются.
 
-- 基础：`luci-app-ttyd`
-- 科学上网：`luci-app-openclash`
-- 去广告：`luci-app-adbyby-plus,luci-app-adblock`
-- 常用组合：`luci-app-ttyd,luci-app-adbyby-plus,luci-app-accesscontrol`
----
-## 支持的设备型号
+Проверка из Windows CMD после запуска:
 
-| 型号 | 说明 |
-|-----|------|
-| ufi003 | 默认，手里有这个板子，优化比较好 |
-| ufi001c | 已支持 |
-| ufi001b | 已支持 |
-| ufi103s | 已支持 |
-| qrzl903 | 已支持 |
-| w001 | 已支持 |
-| uz801 | 已支持 |
-| mf32 | 已支持  [另外一个库 - 安卓电池机破解](https://github.com/x7780/MF32T_MB_V01) |
-| mf601 | 已支持 |
-| wf2 | 已支持 |
-| jz02v10 | 已支持 |
-| sp970v11 | 已支持 |
-| sp970v10 | 已支持 |
+```cmd
+ssh root@192.168.1.1 "sh /usr/lib/podkop/ufi_dns_tunnel.sh check && /etc/init.d/podkop enable"
+curl.exe -4 --noproxy "*" -I --connect-timeout 10 --max-time 20 https://www.google.com/
+```
 
----
+Повторите проверку после перезагрузки. Недоступность `fakeip.podkop.fyi:8443`
+означает, что внешний тест не завершён. Локальная выдача FakeIP, DNS модема,
+маршрутизация и доступ к сайтам проверяются отдельно.
 
-## 项目目录与文件说明
+## Состав и границы
 
-| 路径 | 用途说明 |
-|------|---------|
-| `config/` | 各设备型号的编译配置文件，文件名对应设备型号（如 `ufi003.config`） |
-| `files/` | 编译后覆盖到固件，全是系统配置文件，[files/www 更改首页指南请看这个仓库](https://github.com/x7780/suishen-wifi) |
-| `img/` | README 文档中使用的教程截图 |
-| `scripts/` | 编译过程中执行的辅助脚本 |
-| `工具与脚本/` | 刷机相关工具和辅助脚本合集，包括9008驱动，基带，完整的刷机脚本，等等 |
-| `刷机脚本/` | 编译成功后集成打包到一键刷机包里面 |
-| `diy-part1.sh` | 编译第一阶段自定义脚本，在拉取源码后执行（添加软件源、打补丁等） |
-| `diy-part2.sh` | 编译第二阶段自定义脚本，在生成默认配置后执行（修改配置、添加文件等） |
-| `upstream_history.txt` | 上游源码的更新hash历史记录，如果编译不了可以使用历史hash |
-| `upstream_lock.txt` | 定时更新记录上流可编译hash，避免上流乱改源码后导致编译失败 |
-| `极简的包名.txt` | 常用插件包名速查列表备份，没什么大用，备份参考用 |
-| `.config` | 默认编译配置文件，定义全局编译选项 |
+| Компонент | Поведение |
+|---|---|
+| LTE | Радио UFI001BC 20211121; индивидуальные NV берутся только с прошиваемого модема |
+| Podkop / XHTTP | Podkop 0.7.23, podkop-engine 1.13.21-r12; патчи включены в сборку |
+| DNS | DoH через прокси; автоматический выбор заполненной секции |
+| FakeIP | Диапазон 198.18.0.0/15, включая 198.19.*; IPv4 policy routing в ядре |
+| Zapret | Включён в образ, перехват выключен до подбора стратегии оператора |
+| Wi-Fi | wcn36xx; одновременный AP+STA не заявляется |
+| Восстановление | ufi-care и собственный полный бэкап; кнопку нужно проверить на конкретной плате |
 
----
+## Версии и проверка
 
-### 已启用的默认插件（共3个）不要把这3个插件添加编辑固件里面。
+v3.1.1 загружается у владельца; в присланном журнале подтверждены правило
+маршрутизации и загрузка списков через прокси. v3.1.2 исправляет создание/удаление
+секций, выбор DNS-прокси и диагностику FakeIP.
 
-| 序号 | 插件 | 说明 | 菜单位置 |
-|-----|-----|------|---------|
-| 1 | luci-theme-argon  | argon主题插件 | 国内比较火的主题 |
-| 2 | luci-app-package-manager | 软件包管理 | 系统 → 软件包 |
-| 3 | luci-app-firewallr | 防火墙插件 | 系统 → 防火墙 |
-### 已启用的默认驱动模块，请不要重复添加。
+Новые выпуски публикуются как **Pre-release** до проверки этого образа на модеме.
+В Actions обязательны проверки ядра, rootfs, образов и ARM64 XHTTP.
+[Точный объём проверок](ufi001c-port/VALIDATION-v3.1.2.md).
+Ошибки удалённого прокси вида `INTERNAL_ERROR received from peer` требуют
+отдельной проверки сервера и не устраняются изменением индикатора FakeIP.
 
-| 序号 | 插件 | 说明 | 菜单位置 |
-|-----|-----|------|---------|
-| 4 | kmod-usb-common | USB 公共模块 | 内核模块 |
-| 5 | kmod-usb-core | USB 核心模块 | 内核模块 |
-| 6 | kmod-usb-gadget | USB Gadget 框架 | 内核模块 |
-| 7 | kmod-usb-gadget-eth | USB Gadget 以太网 | 内核模块 |
-| 8 | kmod-usb-gadget-functionfs | USB Gadget FunctionFS | 内核模块 |
-| 9 | kmod-usb-gadget-mass-storage | USB Gadget 大容量存储 | 内核模块 |
-| 10 | kmod-usb-gadget-ncm | USB Gadget NCM 网络 | 内核模块 |
-| 11 | kmod-usb-gadget-serial | USB Gadget 串口 | 内核模块 |
-| 12 | kmod-usb-lib-composite | USB 复合设备库 | 内核模块 |
-| 13 | kmod-usb-net | USB 网络驱动 | 内核模块 |
-| 14 | kmod-usb-net-cdc-ether | USB CDC Ethernet 驱动 | 内核模块 |
-| 15 | kmod-usb-net-cdc-ncm | USB CDC NCM 驱动 | 内核模块 |
-| 16 | kmod-usb-net-huawei-cdc-ncm | 华为 CDC NCM 驱动 | 内核模块 |
-| 17 | kmod-usb-net-rndis | USB RNDIS 网络驱动 | 内核模块 |
-| 18 | kmod-usb-serial | USB 串口驱动 | 内核模块 |
-| 19 | kmod-usb-serial-option | USB 串口 Option 驱动 | 内核模块 |
-| 20 | kmod-usb-serial-wwan | USB 串口 WWAN 驱动 | 内核模块 |
-| 21 | kmod-usb-wdm | USB WDM 驱动 | 内核模块 |
-### 已添加第三方源码插件库。
+## Исходники и благодарности
 
-| 序号 | 地址 | 说明 | 使用方法 |
-|-----|-----|------|------|
-| 1 | https://github.com/kenzok8/small-package | 常用OpenWrt软件包源码合集 | 在编译时填写插件名 |
----
+Основной код сборки — [`ufi001c-port`](ufi001c-port/). Версии источников закреплены
+в `sources.lock.json` и `addons.lock.json`. Сохранены авторство и лицензии OpenWrt,
+OpenStick, Podkop, podkop-engine и EDL; см. [источники движка](ufi001c-port/ENGINE-SOURCES.md)
+и [загрузочные компоненты](ufi001c-port/migration/BASE-SOURCES.md).
+Первоначальная страница родительского проекта сохранена в [README-UPSTREAM.md](README-UPSTREAM.md).
 
-### 推荐好用的工具。
-
-| 序号 | 地址 | 说明 | 使用方法 |
-|-----|-----|------|------|
-| 1 | https://github.com/3899/SimAdmin | 非常好用的sim卡管理工具，作者还在陆续更新 | 进入后台-启动项-本地启动脚本 |
-| 2 | https://picoclaw.io/ | 不占内存的小龙虾，下载linux ARM64 (arm64) 版本解压到设备上| 进入后台-启动项-本地启动脚本 |
-| 3 | https://pumpkinmc.org/ | 我的世界服务端，运行速度非常快，占用内存小| openwrt需要自行编译版本 |
----
-
-### 已禁用的内核调试信息
-
-减少固件体积约50-100MB：
-
-| 配置项 | 说明 | 状态 |
-|-------|------|------|
-| CONFIG_KERNEL_DEBUG_FS | 调试文件系统 | 禁用 太占内存 |
-| CONFIG_KERNEL_DEBUG_KERNEL | 内核调试日志 | 禁用 太占内存 |
-| CONFIG_KERNEL_DEBUG_INFO | 完整调试符号 | 禁用 太占内存 |
-| CONFIG_KERNEL_KALLSYMS | 内核符号表 | 禁用 太占内存 |
-
----
-
-## 特别感谢
-
-- [xuxin1955/Actions-immortalwrt](https://github.com/xuxin1955/Actions-immortalwrt) 感谢作者提供技术
-- [lkiuyu/immortalwrt](https://github.com/lkiuyu/immortalwrt) 感谢作者对驱动和内核修正
-
-## Credits
-
-- [Microsoft Azure](https://azure.microsoft.com)
-- [GitHub Actions](https://github.com/features/actions)
-- [OpenWrt](https://github.com/openwrt/openwrt)
-- [ImmortalWrt](https://github.com/xuxin1955/immortalwrt)
-- [coolsnowwolf/lede](https://github.com/coolsnowwolf/lede)
-- [Mikubill/transfer](https://github.com/Mikubill/transfer)
-- [softprops/action-gh-release](https://github.com/softprops/action-gh-release)
-- [Mattraks/delete-workflow-runs](https://github.com/Mattraks/delete-workflow-runs)
-- [dev-drprasad/delete-older-releases](https://github.com/dev-drprasad/delete-older-releases)
-- [peter-evans/repository-dispatch](https://github.com/peter-evans/repository-dispatch)
-
-
-
-## License
-
-[MIT](https://github.com/P3TERX/Actions-OpenWrt/blob/main/LICENSE) © [**P3TERX**](https://p3terx.com)
+Не загружайте в Issues, Git или Releases свои proxy URL, пароли и дампы eMMC.
