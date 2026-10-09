@@ -36,7 +36,8 @@ required = [
     "PACKAGE_kmod-nfnetlink-queue",
     "PACKAGE_kmod-tun",
     "PACKAGE_kmod-inet-diag",
-
+    "PACKAGE_ip-full",
+    "PACKAGE_coreutils-od",
 ]
 missing = [name for name in required if f"CONFIG_{name}=y\n" not in text]
 if missing:

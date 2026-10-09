@@ -8,13 +8,15 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=libusbgx
 PKG_VERSION:=0.3.0
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 
-PKG_SOURCE_PROTO:=git
-PKG_SOURCE_URL:=https://github.com/linux-usb-gadgets/libusbgx.git
-PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.xz
+# Pinned upstream commit archive; see OPENSTICK-SOURCES.json for verification.
 PKG_SOURCE_VERSION:=dbedf16f80c5b4e1807ea4f80cc89d1f15d36f0a
-PKG_MIRROR_HASH:=43ebc3de10dc5de12cc390e16330e2844166fb80b53c1f2a0b77b9a98970a368
+PKG_SOURCE:=$(PKG_NAME)-$(PKG_SOURCE_VERSION).tar.gz
+PKG_SOURCE_URL:=https://codeload.github.com/linux-usb-gadgets/libusbgx/tar.gz/$(PKG_SOURCE_VERSION)?
+PKG_HASH:=a160db8503d370911e94b15c948292368060e05d2b75f581fac7144f71d3fa65
+PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_SOURCE_VERSION)
+
 
 PKG_BUILD_PARALLEL:=1
 PKG_INSTALL:=1

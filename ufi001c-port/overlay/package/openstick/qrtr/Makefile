@@ -9,13 +9,15 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=qrtr
 PKG_VERSION:=1.1
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 
-PKG_SOURCE_PROTO:=git
-PKG_SOURCE_URL:=https://github.com/linux-msm/qrtr.git
-PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.xz
+# Pinned upstream commit archive; see OPENSTICK-SOURCES.json for verification.
 PKG_SOURCE_VERSION:=5923eea97377f4a3ed9121b358fd919e3659db7b
-PKG_MIRROR_HASH:=783cbf7846675eeeea7f24758c996f0fd144fb1e166ce6686afd7f7d89aaa3c6
+PKG_SOURCE:=$(PKG_NAME)-$(PKG_SOURCE_VERSION).tar.gz
+PKG_SOURCE_URL:=https://codeload.github.com/linux-msm/qrtr/tar.gz/$(PKG_SOURCE_VERSION)?
+PKG_HASH:=dde3f26b9745acb2eebfbae1466aac3283b6adbc558e07ee1f3033b16544bfb4
+PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_SOURCE_VERSION)
+
 
 PKG_LICENSE:=BSD-3-Clause
 

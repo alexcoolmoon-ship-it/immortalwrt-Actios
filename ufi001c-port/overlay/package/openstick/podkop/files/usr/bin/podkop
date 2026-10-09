@@ -127,7 +127,10 @@ start_main() {
     mkdir -p "$TMP_RULESET_FOLDER"
 
     # base
-    route_table_rule_mark
+    route_table_rule_mark || {
+        log "IPv4 policy routing could not be installed. Podkop startup aborted before DNS changes; see the system log." "fatal"
+        exit 1
+    }
     create_nft_rules
     sing_box_configure_service
 
@@ -252,20 +255,7 @@ br_netfilter_disable() {
 
 route_table_rule_mark() {
     grep -q "105 $RT_TABLE_NAME" /etc/iproute2/rt_tables || echo "105 $RT_TABLE_NAME" >> /etc/iproute2/rt_tables
-
-    if ! ip route list table "$RT_TABLE_NAME" 2> /dev/null | grep -q "local default dev lo scope host"; then
-        log "Added route for tproxy" "debug"
-        ip route add local 0.0.0.0/0 dev lo table "$RT_TABLE_NAME"
-    else
-        log "Route for tproxy exists" "debug"
-    fi
-
-    if ! ip rule list | grep -q "from all fwmark $NFT_FAKEIP_MARK/$NFT_FAKEIP_MARK lookup $RT_TABLE_NAME"; then
-        log "Create marking rule" "debug"
-        ip -4 rule add fwmark "$NFT_FAKEIP_MARK"/"$NFT_FAKEIP_MARK" table "$RT_TABLE_NAME" priority 105
-    else
-        log "Marking rule exist" "debug"
-    fi
+    sh "$PODKOP_LIB/ufi_policy_routing.sh" ensure
 }
 
 nft_init_interfaces_set() {
@@ -588,6 +578,11 @@ sing_box_init_config() {
     sing_box_configure_route
     sing_box_configure_experimental
     sing_box_additional_inbounds
+    # UFI_DNS_TUNNEL_V1: preserve DNS routing across reload/reboot
+    config=$(printf '%s\n' "$config" | sh /usr/lib/podkop/ufi_dns_tunnel.sh filter) || {
+        log "DNS tunnel configuration rejected" "fatal"
+        exit 1
+    }
     sing_box_save_config
 }
 
@@ -2000,10 +1995,11 @@ get_status() {
 }
 
 check_dns_available() {
-    local dns_type dns_server bootstrap_dns_server
+    local dns_type dns_server bootstrap_dns_server ufi_dns_proxy_section
     config_get dns_type "settings" "dns_type"
     config_get dns_server "settings" "dns_server"
     config_get bootstrap_dns_server "settings" "bootstrap_dns_server"
+    config_get ufi_dns_proxy_section "settings" "ufi_dns_proxy_section"
 
     local dns_status=0
     local dns_on_router=0
@@ -2023,7 +2019,14 @@ check_dns_available() {
         display_dns_server="dns.nextdns.io/$masked_path"
     fi
 
-    if [ "$dns_type" = "doh" ]; then
+    if [ -n "$ufi_dns_proxy_section" ]; then
+        # The operator may block direct DoH. Probe the configured resolver over
+        # the selected tunnel instead of testing an intentionally unused path.
+        display_dns_server="$display_dns_server (proxy)"
+        if sh "$PODKOP_LIB/ufi_dns_tunnel.sh" probe-dns > /dev/null 2>&1; then
+            dns_status=1
+        fi
+    elif [ "$dns_type" = "doh" ]; then
         # Check if dns_server already contains a path
         local doh_path="/dns-query"
         if echo "$dns_server" | grep -q "/"; then

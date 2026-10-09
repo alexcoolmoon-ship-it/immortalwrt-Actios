@@ -1,0 +1,46 @@
+[
+  {
+    "name": "gc",
+    "repository": "lkiuyu/gc",
+    "commit": "1e2b4d9480cf75663212a2bb7c550f3aae07ef50",
+    "version": "20260310",
+    "url": "https://codeload.github.com/lkiuyu/gc/tar.gz/1e2b4d9480cf75663212a2bb7c550f3aae07ef50",
+    "sha256": "216f029ed489e9ecd6f1799c7b9da17a828be7bd53b5d8bccc338a99f2ea6203",
+    "files": 31,
+    "same_contents_as_pinned_git_archive": true,
+    "differences": []
+  },
+  {
+    "name": "libusbgx",
+    "repository": "linux-usb-gadgets/libusbgx",
+    "commit": "dbedf16f80c5b4e1807ea4f80cc89d1f15d36f0a",
+    "version": "0.3.0",
+    "url": "https://codeload.github.com/linux-usb-gadgets/libusbgx/tar.gz/dbedf16f80c5b4e1807ea4f80cc89d1f15d36f0a",
+    "sha256": "a160db8503d370911e94b15c948292368060e05d2b75f581fac7144f71d3fa65",
+    "files": 86,
+    "same_contents_as_pinned_git_archive": true,
+    "differences": []
+  },
+  {
+    "name": "qrtr",
+    "repository": "linux-msm/qrtr",
+    "commit": "5923eea97377f4a3ed9121b358fd919e3659db7b",
+    "version": "1.1",
+    "url": "https://codeload.github.com/linux-msm/qrtr/tar.gz/5923eea97377f4a3ed9121b358fd919e3659db7b",
+    "sha256": "dde3f26b9745acb2eebfbae1466aac3283b6adbc558e07ee1f3033b16544bfb4",
+    "files": 40,
+    "same_contents_as_pinned_git_archive": true,
+    "differences": []
+  },
+  {
+    "name": "rmtfs",
+    "repository": "linux-msm/rmtfs",
+    "commit": "586372e575f5cc1a7cbb170219ab6df98f394cae",
+    "version": "1.1.1",
+    "url": "https://codeload.github.com/linux-msm/rmtfs/tar.gz/586372e575f5cc1a7cbb170219ab6df98f394cae",
+    "sha256": "7f133f53cb357a1b723e2a954dde252fa4a3db217a489ffa1a654c0b84ab5584",
+    "files": 17,
+    "same_contents_as_pinned_git_archive": true,
+    "differences": []
+  }
+]
