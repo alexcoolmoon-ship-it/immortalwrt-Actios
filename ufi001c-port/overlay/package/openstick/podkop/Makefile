@@ -4,7 +4,7 @@ PKG_NAME:=podkop
 
 PKG_VERSION:=0.7.23
 
-PKG_RELEASE:=4
+PKG_RELEASE:=5
 
 PKG_MAINTAINER:=ITDog <podkop@itdog.info>
 PKG_LICENSE:=GPL-2.0-or-later

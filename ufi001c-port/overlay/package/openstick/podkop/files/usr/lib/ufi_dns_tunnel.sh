@@ -1,5 +1,5 @@
 #!/bin/sh
-# UFI001C / Podkop 0.7.23: DNS via one existing proxy outbound, v3.1.1.
+# UFI001C / Podkop 0.7.23: DNS via one existing proxy outbound, v3.1.2.
 # MIT; local backups can contain private proxy credentials (mode 0600).
 set -eu
 umask 077
@@ -11,6 +11,9 @@ setting() { uci -q get "podkop.settings.$1" 2>/dev/null || true; }
 filter_config() {
     section=${1:-$(setting ufi_dns_proxy_section)}
     [ -n "$section" ] || { cat; return; }
+    if [ "$section" = '@auto' ]; then
+        section=$(sh /usr/lib/podkop/ufi_startup.sh resolve) || die "No configured proxy section for DNS"
+    fi
     case "$section" in *[!A-Za-z0-9_]*|'') die "Invalid section name";; esac
     jq -e --arg tag "$section-out" '
         if ([.outbounds[]? | select(.tag == $tag)] | length) != 1 then
@@ -47,6 +50,8 @@ probe_tunnel_dns() (
     [ -n "$section" ] || die "DNS tunnel section is not configured"
     conf=$(setting config_path)
     conf=${conf:-/etc/sing-box/config.json}
+    section=$(jq -r '[.dns.servers[]? | select(.tag == "dns-server") | .detour // empty][0] // empty' "$conf")
+    case "$section" in *-out) section=${section%-out} ;; *) die "Start Podkop with a configured proxy section first" ;; esac
     # Port 4534 must use the SAME outbound as the actual DNS server.
     jq -e --arg tag "$section-out" '
         any(.dns.servers[]?; .tag == "dns-server" and .type == "https" and .detour == $tag) and
@@ -82,7 +87,9 @@ check_status() {
     conf=$(setting config_path)
     conf=${conf:-/etc/sing-box/config.json}
     section=$(setting ufi_dns_proxy_section)
-    echo "DNS tunnel section: ${section:-not installed}"
+    echo "DNS tunnel preference: ${section:-not installed}"
+    actual=$(jq -r '[.dns.servers[]? | select(.tag == "dns-server") | .detour // empty][0] // empty' "$conf" 2>/dev/null || true)
+    echo "Active DNS outbound: ${actual:-Podkop is not configured/running}"
     sing-box version | head -n 1
     if [ -r "$conf" ]; then
         jq '{dns_servers: [.dns.servers[]? | {tag,type,server,detour}],
@@ -99,6 +106,10 @@ check_status() {
         echo "Router DNS, example.com:"
         dig @127.0.0.42 example.com A +time=5 +tries=1 +noall +answer || status=1
     fi
+    echo 'Local FakeIP checks (public test availability is separate):'
+    fakeip_report=$(sh /usr/lib/podkop/ufi_fakeip_check.sh local) || fakeip_report='{}'
+    printf '%s\n' "$fakeip_report"
+    printf '%s' "$fakeip_report" | jq -e '.local_fakeip and .dnsmasq_fakeip and .policy_route' >/dev/null || status=1
     return "$status"
 }
 
@@ -129,7 +140,8 @@ restore_backup() {
 install_fix() {
     [ "$(id -u)" = 0 ] || die "Run as root on the modem"
     for tool in uci jq curl sing-box awk sha256sum; do need "$tool"; done
-    section=${1:-dns_only}
+    section=${1:-@auto}
+    section=$(sh /usr/lib/podkop/ufi_startup.sh resolve "$section") || die "Add a proxy section and enter a URL in LuCI first"
     case "$section" in *[!A-Za-z0-9_]*|'') die "Invalid section name";; esac
     [ "$(uci -q get "podkop.$section.connection_type" || true)" = proxy ] || die "Section $section is not a proxy"
     [ -z "$(uci changes podkop)" ] || die "Save or discard pending Podkop changes in LuCI first"
@@ -138,6 +150,8 @@ install_fix() {
     conf=$(setting config_path)
     conf=${conf:-/etc/sing-box/config.json}
     [ -s "$conf" ] || die "Start Podkop once to generate its configuration"
+    jq -e '(.dns.servers | type == "array") and (.outbounds | type == "array")' "$conf" >/dev/null 2>&1 ||
+        die "Start Podkop with a configured proxy URL first; the initial sing-box template has no DNS configuration"
     prog=/usr/bin/podkop
     helper=/usr/lib/podkop/ufi_dns_tunnel.sh
     expected=a23ac5e1644bf90465e273253d8edacf487b6db3356556a3d138114887f5aeb1
@@ -245,7 +259,7 @@ EOF
 case "${1:-install}" in
     filter) filter_config "${2:-}" ;;
     probe-dns) probe_tunnel_dns ;;
-    install) install_fix "${2:-dns_only}" ;;
+    install) install_fix "${2:-@auto}" ;;
     check) check_status ;;
     rollback) [ -r /root/ufi-dns-tunnel-last-backup ] || die "No backup recorded"; restore_backup "$(cat /root/ufi-dns-tunnel-last-backup)" ;;
     *) die "Usage: sh ufi-dns-tunnel.sh [install [section] | check | probe-dns | rollback]" ;;

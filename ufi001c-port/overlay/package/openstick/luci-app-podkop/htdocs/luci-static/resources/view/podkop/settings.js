@@ -1,4 +1,5 @@
 "use strict";
+"require view.podkop.ufi_sections as ufiSections";
 "require form";
 "require uci";
 "require baseclass";
@@ -298,27 +299,16 @@ function createSettingsContent(section) {
     _("Downloading all lists via specific Proxy/VPN"),
   );
 
-  o.rmempty = false;
   o.depends("download_lists_via_proxy", "1");
-  o.cfgvalue = function (section_id) {
-    return uci.get("podkop", section_id, "download_lists_via_proxy_section");
-  };
-  o.load = function () {
-    const sections = this.map?.data?.state?.values?.podkop ?? {};
+  ufiSections.configure(o, false);
 
-    this.keylist = [];
-    this.vallist = [];
-
-    for (const secName in sections) {
-      const sec = sections[secName];
-      if (sec[".type"] === "section" && sec['connection_type'] !== 'block' && sec['connection_type'] !== 'exclusion') {
-        this.keylist.push(secName);
-        this.vallist.push(secName);
-      }
-    }
-
-    return Promise.resolve();
-  };
+  o = section.option(
+    form.ListValue,
+    "ufi_dns_proxy_section",
+    _("Proxy for encrypted DNS"),
+    _("DNS and list downloads use this proxy. Automatic selection ignores empty sections and follows renamed sections."),
+  );
+  ufiSections.configure(o, true);
 
   o = section.option(
     form.Flag,

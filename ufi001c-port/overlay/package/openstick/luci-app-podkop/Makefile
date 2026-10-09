@@ -4,11 +4,13 @@ PKG_NAME:=luci-app-podkop
 
 PKG_VERSION:=0.7.23
 
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 
 LUCI_TITLE:=LuCI podkop app
 LUCI_DEPENDS:=+luci-base +podkop
 LUCI_PKGARCH:=all
+# Keep the checked UI bytes identical to the source and live hotfix.
+LUCI_MINIFY_JS:=0
 LUCI_LANG.ru:=Русский (Russian)
 LUCI_LANG.en:=English
 

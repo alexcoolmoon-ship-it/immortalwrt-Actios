@@ -1,0 +1,47 @@
+{
+  "commit": "8024906eebaddfde6a28f51e440f9d53c6b677cc",
+  "files": {
+    "usr/bin/podkop": {
+      "source": "ufi001c-port/overlay/package/openstick/podkop/files/usr/bin/podkop",
+      "old_sha256": "2d2f68c823cc1ffdb8b34477665ac73068125bd3facdc3b31ce8997004f8d304",
+      "alternate_old_sha256": null,
+      "mode": "755"
+    },
+    "usr/lib/podkop/ufi_dns_tunnel.sh": {
+      "source": "ufi001c-port/overlay/package/openstick/podkop/files/usr/lib/ufi_dns_tunnel.sh",
+      "old_sha256": "f8884f3118cad55f217a9bce3d53c9cd142eeb08e4a9b08a532275fed6f58255",
+      "alternate_old_sha256": null,
+      "mode": "755"
+    },
+    "usr/lib/podkop/ufi_startup.sh": {
+      "source": "ufi001c-port/overlay/package/openstick/podkop/files/usr/lib/ufi_startup.sh",
+      "old_sha256": null,
+      "alternate_old_sha256": null,
+      "mode": "755"
+    },
+    "www/luci-static/resources/view/podkop/settings.js": {
+      "source": "ufi001c-port/overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js",
+      "old_sha256": "dfe5e970d5d57142870ea223c948c4c248402b2f155865e7de413c3b7e266be5",
+      "alternate_old_sha256": "739d5cba1c9cf9d3823d586214cc04db28c5e68ea7297140badcce6551b313c9",
+      "mode": "644"
+    },
+    "www/luci-static/resources/view/podkop/ufi_sections.js": {
+      "source": "ufi001c-port/overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/ufi_sections.js",
+      "old_sha256": null,
+      "alternate_old_sha256": null,
+      "mode": "644"
+    },
+    "www/luci-static/resources/view/podkop/main.js": {
+      "source": "ufi001c-port/overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js",
+      "old_sha256": "e2af3f2b4d41a40653a260bfad70a8c179282951a06b5dbd4dafb7cd0e5f5a53",
+      "alternate_old_sha256": "b05b43bbea8880d719bdead3e1484ed5124bdc7299125f2ade8ab5f8c875b011",
+      "mode": "644"
+    },
+    "usr/lib/podkop/ufi_fakeip_check.sh": {
+      "source": "ufi001c-port/overlay/package/openstick/podkop/files/usr/lib/ufi_fakeip_check.sh",
+      "old_sha256": null,
+      "alternate_old_sha256": null,
+      "mode": "755"
+    }
+  }
+}

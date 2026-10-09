@@ -11,6 +11,11 @@ FILES = {
     'usr/bin/podkop': 'overlay/package/openstick/podkop/files/usr/bin/podkop',
     'usr/lib/podkop/ufi_dns_tunnel.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_dns_tunnel.sh',
     'usr/lib/podkop/ufi_policy_routing.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_policy_routing.sh',
+    'usr/lib/podkop/ufi_startup.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_startup.sh',
+    'usr/lib/podkop/ufi_fakeip_check.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_fakeip_check.sh',
+    'www/luci-static/resources/view/podkop/main.js': 'overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js',
+    'www/luci-static/resources/view/podkop/settings.js': 'overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js',
+    'www/luci-static/resources/view/podkop/ufi_sections.js': 'overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/ufi_sections.js',
     'etc/uci-defaults/99-ufi001c-addons': 'overlay/package/openstick/ufi001c-defaults/files/99-ufi001c-addons',
 }
 

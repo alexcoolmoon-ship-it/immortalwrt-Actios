@@ -31,6 +31,9 @@ check_required_file "$PODKOP_LIB/rulesets.sh"
 . "$PODKOP_LIB/logging.sh"
 . "$PODKOP_LIB/rulesets.sh"
 
+check_required_file "$PODKOP_LIB/ufi_startup.sh"
+. "$PODKOP_LIB/ufi_startup.sh"
+
 config_load "$PODKOP_CONFIG"
 
 check_requirements() {
@@ -102,7 +105,7 @@ _check_outbound_section() {
 has_outbound_section() {
     local section_exists=1
 
-    config_foreach _check_outbound_section "section"
+    ufi_each_section _check_outbound_section
 
     return $section_exists
 }
@@ -111,10 +114,11 @@ start_main() {
     log "Starting podkop"
 
     check_requirements
+    ufi_prepare_runtime || return 1
 
     migration
 
-    config_foreach process_validate_service "section"
+    ufi_each_section process_validate_service
 
     br_netfilter_disable
 
@@ -136,7 +140,7 @@ start_main() {
 
     # sing-box
     sing_box_init_config
-    config_foreach add_cron_job "section"
+    ufi_each_section add_cron_job
     /etc/init.d/sing-box start
 
     log "Nice"
@@ -180,7 +184,12 @@ stop_main() {
 }
 
 start() {
-    start_main
+    if ! has_outbound_section; then
+        stop
+        log "No configured proxy/VPN section yet. Add a section and a connection URL in LuCI; ordinary modem DNS remains available." info
+        return 0
+    fi
+    start_main || { stop; return 1; }
 
     config_get_bool dont_touch_dhcp "settings" "dont_touch_dhcp" 0
     if [ "$dont_touch_dhcp" -eq 0 ]; then
@@ -206,8 +215,8 @@ stop() {
 
 reload() {
     log "Podkop reload"
-    stop_main
-    start_main
+    stop
+    start
 }
 
 restart() {
@@ -526,9 +535,9 @@ list_update() {
 
     echolog "📥 Downloading and processing lists..."
 
-    config_foreach import_community_subnet_lists "section"
-    config_foreach import_domains_from_remote_domain_lists "section"
-    config_foreach import_subnets_from_remote_subnet_lists "section"
+    ufi_each_section import_community_subnet_lists
+    ufi_each_section import_domains_from_remote_domain_lists
+    ufi_each_section import_subnets_from_remote_subnet_lists
 
     if [ $? -eq 0 ]; then
         echolog "✅ Lists update completed successfully"
@@ -579,7 +588,9 @@ sing_box_init_config() {
     sing_box_configure_experimental
     sing_box_additional_inbounds
     # UFI_DNS_TUNNEL_V1: preserve DNS routing across reload/reboot
-    config=$(printf '%s\n' "$config" | sh /usr/lib/podkop/ufi_dns_tunnel.sh filter) || {
+    local ufi_dns_section
+    config_get ufi_dns_section settings ufi_dns_proxy_section
+    config=$(printf '%s\n' "$config" | sh /usr/lib/podkop/ufi_dns_tunnel.sh filter "$ufi_dns_section") || {
         log "DNS tunnel configuration rejected" "fatal"
         exit 1
     }
@@ -611,7 +622,7 @@ sing_box_configure_outbounds() {
 
     config=$(sing_box_cm_add_direct_outbound "$config" "$SB_DIRECT_OUTBOUND_TAG")
 
-    config_foreach configure_outbound_handler "section"
+    ufi_each_section configure_outbound_handler
 }
 
 configure_outbound_handler() {
@@ -857,9 +868,9 @@ sing_box_configure_route() {
         config_list_foreach "settings" "routing_excluded_ips" exclude_source_ip_from_routing_handler "$rule_tag"
     fi
 
-    config_foreach include_source_ips_in_routing_handler "section"
+    ufi_each_section include_source_ips_in_routing_handler
 
-    config_foreach configure_routing_for_section_lists "section"
+    ufi_each_section configure_routing_for_section_lists
 }
 
 include_source_ips_in_routing_handler() {
@@ -1238,7 +1249,7 @@ sing_box_additional_inbounds() {
         )
     fi
 
-    config_foreach configure_section_mixed_proxy "section"
+    ufi_each_section configure_section_mixed_proxy
 }
 
 configure_section_mixed_proxy() {
@@ -1563,7 +1574,7 @@ _determine_first_outbound_section() {
 get_first_outbound_section() {
     local first_section=""
 
-    config_foreach _determine_first_outbound_section "section"
+    ufi_each_section _determine_first_outbound_section
 
     echo "$first_section"
 }
@@ -2230,7 +2241,7 @@ check_sing_box() {
 }
 
 check_fakeip() {
-    curl -m 3 -s "https://$FAKEIP_TEST_DOMAIN/check" | jq .
+    sh "$PODKOP_LIB/ufi_fakeip_check.sh"
 }
 
 #######################################
@@ -2659,27 +2670,19 @@ global_check() {
     local fakeip_check_json
     fakeip_check_json=$(check_fakeip)
 
-    if [ -n "$fakeip_check_json" ]; then
-        local fakeip_status
-
-        fakeip_status=$(echo "$fakeip_check_json" | jq -r '.fakeip // false')
-
-        if [ "$fakeip_status" = "true" ]; then
-            print_global "✅ Router DNS is routed through sing-box"
+    if printf '%s' "$fakeip_check_json" | jq -e '.local_fakeip and .dnsmasq_fakeip and .policy_route' >/dev/null 2>&1; then
+        print_global "✅ Local FakeIP allocation, dnsmasq forwarding and marked route work"
+    else
+        print_global "❌ A local FakeIP/DNS/policy-route check failed; see check_fakeip JSON"
+    fi
+    if printf '%s' "$fakeip_check_json" | jq -e '.external_available' >/dev/null 2>&1; then
+        if printf '%s' "$fakeip_check_json" | jq -e '.fakeip' >/dev/null 2>&1; then
+            print_global "✅ External router FakeIP test passed"
         else
-            print_global "⚠️ Router DNS is NOT routed through sing-box"
+            print_global "⚠️ External router test responded without FakeIP"
         fi
     else
-        print_global "❌ Failed to get FakeIP info"
-    fi
-
-    local fakeip_address
-    fakeip_address=$(dig +short @127.0.0.42 $FAKEIP_TEST_DOMAIN)
-
-    if echo "$fakeip_address" | grep -q "^198\.18\."; then
-        print_global "✅ Sing-box works with FakeIP: $fakeip_address"
-    else
-        print_global "❌ Sing-box does NOT work with FakeIP: $fakeip_address"
+        print_global "⚠️ External FakeIP test is unavailable; end-to-end interception is not verified"
     fi
 }
 

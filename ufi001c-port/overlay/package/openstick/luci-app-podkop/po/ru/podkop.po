@@ -817,3 +817,42 @@ msgstr "Секретный ключ YACD"
 
 msgid "You can select Output Network Interface, by default autodetect"
 msgstr "Вы можете выбрать выходной сетевой интерфейс, по умолчанию он определяется автоматически."
+
+msgid "Automatic (first configured proxy)"
+msgstr "Автоматически — первая заполненная прокси-секция"
+
+msgid "Proxy for encrypted DNS"
+msgstr "Прокси для защищённого DNS"
+
+msgid "DNS and list downloads use this proxy. Automatic selection ignores empty sections and follows renamed sections."
+msgstr "DNS и списки загружаются через этот прокси. Автовыбор пропускает пустые секции и работает после их переименования."
+
+msgid "Sing-box allocates a FakeIP address"
+msgstr "Sing-box выдаёт адрес FakeIP"
+
+msgid "Router DNS returns a FakeIP address"
+msgstr "DNS модема возвращает адрес FakeIP"
+
+msgid "Marked IPv4 traffic has a local route"
+msgstr "Маршрут для помеченного IPv4-трафика установлен"
+
+msgid "External router FakeIP test"
+msgstr "Внешняя проверка FakeIP с модема"
+
+msgid "Test server unavailable; result unknown"
+msgstr "Тестовый сервер недоступен; результат не определён"
+
+msgid "Direct and proxy public IP comparison"
+msgstr "Сравнение внешнего IP напрямую и через прокси"
+
+msgid "Same public IP; this alone does not prove failure"
+msgstr "Одинаковый внешний IP сам по себе не означает ошибку"
+
+msgid "Check unavailable"
+msgstr "Проверка недоступна"
+
+msgid "Some checks could not be completed"
+msgstr "Часть проверок не удалось выполнить"
+
+msgid "Problems detected"
+msgstr "Обнаружены проблемы"

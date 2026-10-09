@@ -5,9 +5,9 @@ uci -q batch <<'EOF'
 set podkop.settings.dns_type='doh'
 set podkop.settings.dns_server='1.1.1.1'
 set podkop.settings.bootstrap_dns_server='77.88.8.8'
-set podkop.settings.ufi_dns_proxy_section='dns_only'
+set podkop.settings.ufi_dns_proxy_section='@auto'
 set podkop.settings.download_lists_via_proxy='1'
-set podkop.settings.download_lists_via_proxy_section='dns_only'
+set podkop.settings.download_lists_via_proxy_section='@auto'
 set podkop.settings.enable_yacd='0'
 set podkop.settings.enable_badwan_interface_monitoring='1'
 delete podkop.settings.badwan_monitored_interfaces
@@ -19,9 +19,12 @@ set podkop.dns_only.connection_type='proxy'
 set podkop.dns_only.proxy_config_type='url'
 set podkop.dns_only.proxy_string=''
 add_list podkop.dns_only.community_lists='russia_inside'
+set sing-box.main.dns_fallback='0'
+set sing-box.main.failsafe='0'
 set firewall.@defaults[0].flow_offloading='0'
 set firewall.@defaults[0].flow_offloading_hw='0'
 commit podkop
+commit sing-box
 commit firewall
 EOF
 /etc/init.d/zapret disable

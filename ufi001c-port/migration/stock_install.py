@@ -40,7 +40,10 @@ NV = ('modemst1', 'modemst2', 'fsg', 'fsc', 'sec')
 ANCHORS = ('modemst1', 'modemst2')
 LIMITS = {'boot.img': 64*1024**2, 'system.img': GIB,
           'SHA256SUMS': 262144, 'ACCESS.txt': 16384, 'build.config': 2*1024**2,
-          'xhttp-validation.json': 65536, 'addons.lock.json': 65536}
+          'xhttp-validation.json': 65536, 'addons.lock.json': 65536,
+          'routing-rootfs-check.json': 65536, 'kernel-routing-check.txt': 16384,
+          'validation.json': 65536, 'release-info.json': 16384,
+          'INSTALL-RU.md': 65536, 'VALIDATION-v3.1.2.md': 65536}
 
 
 def digest_bytes(data):
