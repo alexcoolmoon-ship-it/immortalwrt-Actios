@@ -1,5 +1,5 @@
 #!/bin/sh
-# UFI001C v3.1.2: section names are user choices, not firmware dependencies.
+# UFI001C v3.1.4: resolve filled single proxies and proxy-only groups.
 # Sourced by Podkop after /lib/functions.sh; no writes to UCI or the network.
 
 ufi_section_ready() {
@@ -42,7 +42,7 @@ ufi_dns_candidate() {
     config_get kind "$section" connection_type
     config_get format "$section" proxy_config_type url
     [ "$kind" = proxy ] || return 1
-    case "$format" in url|outbound) ;; *) return 1 ;; esac
+    case "$format" in url|outbound|selector|urltest) ;; *) return 1 ;; esac
     ufi_section_ready "$section"
 }
 
@@ -70,11 +70,11 @@ ufi_resolve_dns_section() {
 }
 
 ufi_prepare_runtime() {
-    local requested selected download
+    local requested selected download services
     config_get requested settings ufi_dns_proxy_section
     if [ -n "$requested" ]; then
         selected=$(ufi_resolve_dns_section "$requested") || {
-            log 'DNS via proxy needs a filled single-URL or single-outbound proxy section. Empty templates are ignored.' fatal
+            log 'DNS via proxy needs a filled proxy section (URL, outbound, selector or URLTest). Empty templates are ignored.' fatal
             return 1
         }
         # Runtime config only. Preserve the automatic/user choice in /etc/config.
@@ -83,6 +83,17 @@ ufi_prepare_runtime() {
         config_set settings download_lists_via_proxy_section "$selected"
         log "DNS and list downloads use proxy section '$selected'" info
     else
+        config_get_bool services settings ufi_service_proxy 1
+        if [ "$services" = 1 ]; then
+            selected=$(ufi_resolve_dns_section '@auto') || {
+                log 'Package downloads via proxy need a filled proxy section (URL, outbound, selector or URLTest).' fatal
+                return 1
+            }
+            config_set settings download_lists_via_proxy 1
+            config_set settings download_lists_via_proxy_section "$selected"
+            log "Package and list downloads use proxy section '$selected'" info
+            return 0
+        fi
         config_get download settings download_lists_via_proxy_section
         if [ "$download" = '@auto' ] || ! ufi_section_ready "$download"; then
             selected=$(get_first_outbound_section)

@@ -77,6 +77,55 @@ class StockTests(unittest.TestCase):
         work=self.p/'prepared';work.mkdir()
         return s.update.prepare_images(images,work),work
 
+    def test_4gb_layout_is_exact_and_both_target_gpts_fit(self):
+        profile = s.load_profile(BASE, 'ufi001c-4gb-ufi001bc-20211121')
+        profile['stock_modem_sha256'] = self.profile['stock_modem_sha256']
+        dump = stock_fixture(self.p/'stock4.bin', profile)
+        preview = self.p/'preview.bin'
+        with dump.open('rb') as f: preview.write_bytes(f.read(34*512))
+        self.assertEqual(s.preview_profile(preview, BASE)['id'], profile['id'])
+        prepared, work = self.image_pair()
+        plan, stock, _ = s.make_plan(dump, profile, BASE, work, prepared)
+        self.assertEqual(plan[-2]['first_lba'], profile['disk_bytes']//512-33)
+        self.assertTrue(all((x['first_lba']+x['sectors'])*512 <= profile['disk_bytes'] for x in plan))
+        with self.assertRaisesRegex(ValueError, 'Different factory radio'):
+            s.check_stock(dump, s.load_profile(BASE, profile['id']))
+
+    def test_preview_rejects_unknown_size_moved_partition_and_bad_crc(self):
+        import copy
+        for mode in ('size', 'moved', 'crc'):
+            profile = copy.deepcopy(self.profile)
+            if mode == 'size':
+                profile['disk_bytes'] -= 512
+                profile['geometry'][-1][-1] -= 1
+            if mode == 'moved': profile['geometry'][12][1] += 1
+            dump = stock_fixture(self.p/(mode+'.bin'), profile)
+            with dump.open('rb') as f: data = bytearray(f.read(34*512))
+            if mode == 'crc': data[512+16] ^= 1
+            preview = self.p/(mode+'-gpt.bin'); preview.write_bytes(data)
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                s.preview_profile(preview, BASE)
+
+    def test_probe_only_reads_gpt_and_radio_and_never_exports_nv(self):
+        dump = stock_fixture(self.p/'device.bin', self.profile)
+        base = self.p/'stock-base'; base.mkdir()
+        (base/'stock-profile.json').write_text(json.dumps(self.profile))
+        calls=[]
+        def edl(action, *args):
+            self.assertEqual(action, 'rs')
+            start,count,path = args
+            calls.append((start,count))
+            with dump.open('rb') as src:
+                src.seek(start*512); Path(path).write_bytes(src.read(count*512))
+        args=argparse.Namespace(backups=self.p/'backups',edl_root=self.p,output=self.p/'report.json')
+        with patch.object(s,'HERE',self.p), patch.object(s,'EDL',return_value=edl), patch('builtins.input',return_value=''):
+            s.probe(args)
+        self.assertEqual(calls, [(0,34),(self.profile['disk_bytes']//512-33,33),(131072,131072)])
+        report=json.loads(args.output.read_text())
+        self.assertTrue(report['stock_modem_hash_matches'])
+        self.assertFalse(report['writes_performed'])
+        self.assertFalse(report['full_backup_created'])
+
     def test_target_gpt_both_copies_capacity_root_order_and_unique_guids(self):
         parts,a,b=s.target_gpt(BASE/'gpt_both0.bin',self.profile['disk_bytes'],self.p)
         self.assertEqual(list(parts)[-1],'rootfs')

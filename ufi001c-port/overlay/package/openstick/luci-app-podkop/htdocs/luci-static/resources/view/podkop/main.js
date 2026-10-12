@@ -882,7 +882,7 @@ var STATUS_COLORS = {
   ERROR: "#f44336",
   WARNING: "#ff9800"
 };
-var PODKOP_LUCI_APP_VERSION = "0.7.23";
+var PODKOP_LUCI_APP_VERSION = "0.7.24";
 var FAKEIP_CHECK_DOMAIN = "fakeip.podkop.fyi";
 var IP_CHECK_DOMAIN = "ip.podkop.fyi";
 var REGIONAL_OPTIONS = [

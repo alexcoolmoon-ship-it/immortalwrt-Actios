@@ -1,0 +1,1 @@
+UFI001C stability patch 2026-10-11: USB hotplug gate and DNS proxy groups

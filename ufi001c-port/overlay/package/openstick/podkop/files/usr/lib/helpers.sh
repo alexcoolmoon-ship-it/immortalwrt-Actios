@@ -272,22 +272,27 @@ migration_rename_config_key() {
 
 # Download URL to file
 download_to_file() {
-    local url="$1"
-    local filepath="$2"
-    local http_proxy_address="$3"
-    local retries="${4:-3}"
-    local wait="${5:-2}"
-
-    for attempt in $(seq 1 "$retries"); do
+    local url="$1" filepath="$2" http_proxy_address="${3:-}"
+    local retries="${4:-3}" wait="${5:-2}" attempt=1 temp redirects='=http,https'
+    temp=$(mktemp "${filepath}.download.XXXXXX") || { ufi_download_failed=1; return 1; }
+    case "$url" in https://*) redirects='=https';; esac
+    while [ "$attempt" -le "$retries" ]; do
         if [ -n "$http_proxy_address" ]; then
-            http_proxy="http://$http_proxy_address" https_proxy="http://$http_proxy_address" wget -O "$filepath" "$url" && break
+            curl --fail --location --silent --show-error --proxy "http://$http_proxy_address" --noproxy ''                 --proto '=http,https' --proto-redir "$redirects" --connect-timeout 10 --max-time 120                 --output "$temp" --url "$url"
         else
-            wget -O "$filepath" "$url" && break
+            /usr/libexec/ufi-service-fetch --fail --location --silent --show-error                 --proto '=http,https' --proto-redir "$redirects" --connect-timeout 10 --max-time 120                 --output "$temp" --url "$url"
         fi
-
-        log "Attempt $attempt/$retries to download $url failed" "warn"
-        sleep "$wait"
+        if [ "$?" -eq 0 ]; then
+            if mv "$temp" "$filepath"; then return 0; fi
+            break
+        fi
+        log "Attempt $attempt/$retries to download $url failed" warn
+        [ "$attempt" -ge "$retries" ] || sleep "$wait"
+        attempt=$((attempt + 1))
     done
+    rm -f "$temp"
+    ufi_download_failed=1
+    return 1
 }
 
 # Converts Windows-style line endings (CRLF) to Unix-style (LF)

@@ -25,6 +25,7 @@ required = [
     "PACKAGE_ufi001c-defaults",
     "PACKAGE_ufi-care",
     "PACKAGE_podkop",
+    "PACKAGE_ufi-service-proxy",
     "PACKAGE_luci-app-podkop",
     "PACKAGE_luci-i18n-podkop-ru",
     "PACKAGE_podkop-engine",

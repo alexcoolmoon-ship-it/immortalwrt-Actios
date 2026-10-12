@@ -33,3 +33,11 @@ for package in ('sing-box', 'sing-box-tiny'):
         text = text.replace(old, new)
 recipe.write_text(text)
 print('Go 1.26.8 and podkop-engine 1.13.21-r12 selected')
+
+# Bind the LuCI package manager to the service-proxy APK wrapper.
+relative = Path('luci/applications/luci-app-package-manager/root/usr/libexec/package-manager-call')
+source = here / 'feed-overrides' / relative
+target = root / 'feeds' / relative
+if digest(target) not in ('3cb9f991ce4ca92ef4c394ae663e513e3154ac9984806118cc061c735c2eb1f5', digest(source)):
+    raise SystemExit('Unexpected LuCI package-manager helper; revalidate pinned feed')
+target.write_bytes(source.read_bytes())

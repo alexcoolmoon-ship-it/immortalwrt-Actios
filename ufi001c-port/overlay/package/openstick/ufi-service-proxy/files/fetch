@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+mode=$(uci -q get podkop.settings.ufi_service_proxy || true)
+case "${mode:-1}" in
+    0) exec curl --proxy '' --noproxy '*' "$@" ;;
+    1) ;;
+    *) echo 'Invalid Podkop service proxy setting.' >&2; exit 64 ;;
+esac
+config=$(uci -q get podkop.settings.config_path || true)
+config=${config:-/etc/sing-box/config.json}
+if ! pidof sing-box >/dev/null || ! jq -e -f /usr/share/ufi-service-proxy/ready.jq "$config" >/dev/null 2>&1; then
+    echo 'Service proxy is not ready. Save a proxy in Services > Podkop, start it, then retry. No direct download was attempted.' >&2
+    exit 69
+fi
+exec curl --proxy http://127.0.0.1:4534 --noproxy '' "$@"

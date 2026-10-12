@@ -1,4 +1,4 @@
-# UFI001C stock installer 3.0-rc1 — validation boundaries
+# UFI001C stock installer 3.1.3-rc1 — validation boundaries
 
 This is a first-stock-hardware-test candidate, not a claim that the stock
 conversion has already booted on a second unit. The user confirmed that v2
@@ -41,3 +41,11 @@ Still needed on hardware: the first complete RC1 stock conversion, Windows
 launcher/file picker/driver interaction, LTE and Wi-Fi, reset button behavior,
 and a real restoration trial. Kernel compilation is not repeated for a change
 to the host installer.
+
+October 11 revision: exact 4GB profile (3875536896 bytes, userdata last LBA 7569374)
+added alongside the original 8GB profile. Every other partition matches the
+observed stock GPT. The same factory-radio SHA256 gate remains mandatory.
+New tests cover exact profile selection, unknown/moved layouts, 4GB write
+bounds, secondary GPT placement and probe read-only scope. The read-only probe
+never reads NV, never writes the device, and is not a full backup.
+The full installer still validates actual full-dump size and both GPT copies.

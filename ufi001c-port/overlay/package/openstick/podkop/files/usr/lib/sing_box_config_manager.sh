@@ -1463,6 +1463,28 @@ sing_box_cm_configure_cache_file() {
 }
 
 #######################################
+# Configure the experimental utls_fallback section of a sing-box JSON configuration.
+# Arguments:
+#   config: string (JSON), sing-box configuration to modify
+#   fingerprints: string, JSON array of uTLS fingerprints to try, in this order
+# Outputs:
+#   Writes updated JSON configuration to stdout
+# Example:
+#   CONFIG=$(sing_box_cm_configure_utls_fallback "$CONFIG" '["safari","randomized"]')
+#######################################
+sing_box_cm_configure_utls_fallback() {
+    local config="$1"
+    local fingerprints="$2"
+
+    echo "$config" | jq \
+        --argjson fingerprints "$fingerprints" \
+        '.experimental.utls_fallback = {
+            enabled: true,
+            fingerprints: $fingerprints
+        }'
+}
+
+#######################################
 # Configure the experimental clash_api section of a sing-box JSON configuration.
 # Arguments:
 #   config: string (JSON), sing-box configuration to modify
@@ -1493,6 +1515,7 @@ sing_box_cm_configure_clash_api() {
 
 #######################################
 # Save a sing-box JSON configuration to a file, removing service-specific tags.
+# A DNS route rule left without a condition is not saved: it would match every query.
 # Arguments:
 #   config: string (JSON), sing-box configuration to modify
 #   file_path: string, path to save the configuration file
@@ -1507,7 +1530,8 @@ sing_box_cm_save_config_to_file() {
 
     echo "$config" | jq \
         --arg tag "$SERVICE_TAG" \
-        'walk(if type == "object" then del(.[$tag]) else . end)' \
+        'del(.dns.rules[]? | select(.action == "route" and del(.action, .server, .rewrite_ttl, .[$tag]) == {})) |
+        walk(if type == "object" then del(.[$tag]) else . end)' \
         > "$filepath"
 }
 

@@ -9,7 +9,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=gc
 PKG_VERSION:=20260310
-PKG_RELEASE:=2
+PKG_RELEASE:=3
 
 # Pinned upstream commit archive; see OPENSTICK-SOURCES.json for verification.
 PKG_SOURCE_VERSION:=1e2b4d9480cf75663212a2bb7c550f3aae07ef50

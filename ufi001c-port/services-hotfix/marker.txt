@@ -1,0 +1,1 @@
+UFI001C services patch 3.1.4; Podkop scripts/UI 0.7.24. Firmware, kernel and APK database unchanged.

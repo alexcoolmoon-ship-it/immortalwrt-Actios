@@ -113,11 +113,40 @@ start''')
         p = self.run_shell(cfg, 'ufi_resolve_dns_section second')
         self.assertEqual(p.stdout.strip(), 'second', p.stderr)
 
-    def test_selector_is_not_silently_used_as_single_dns_proxy(self):
-        cfg = "config section chooser\noption connection_type proxy\noption proxy_config_type selector\nlist selector_proxy_links " + shlex.quote(URL)
-        p = self.run_shell(cfg, 'ufi_prepare_runtime')
-        self.assertNotEqual(p.returncode, 0)
-        self.assertIn('single-URL', p.stderr)
+    def test_filled_groups_are_dns_candidates_and_empty_groups_are_not(self):
+        for kind in ('selector', 'urltest'):
+            for payload in ('', URL):
+                with self.subTest(kind=kind, filled=bool(payload)):
+                    cfg = f"config section chooser\noption connection_type proxy\noption proxy_config_type {kind}\nlist {kind}_proxy_links " + shlex.quote(payload)
+                    p = self.run_shell(cfg, 'ufi_prepare_runtime && ufi_resolve_dns_section')
+                    self.assertEqual(p.returncode == 0, bool(payload), p.stderr)
+                    if payload: self.assertEqual(p.stdout.strip(), 'chooser')
+
+    def test_real_generator_urltest_selector_and_fallback_use_proxy_dns(self):
+        for kind in ('selector', 'urltest'):
+            with self.subTest(kind=kind):
+                cfg = f"config section dns_only\noption connection_type proxy\noption proxy_config_type {kind}\nlist {kind}_proxy_links " + shlex.quote(URL)
+                cfg += f"\nlist {kind}_proxy_links " + shlex.quote(URL.replace('proxy.example', 'other.example'))
+                cfg += "\nlist urltest_fallback_links " + shlex.quote(URL.replace('proxy.example', 'fallback.example'))
+                p = self.run_shell(cfg, '''ufi_prepare_runtime || exit 1
+sing_box_save_config() { local output; output=$(mktemp); sing_box_cm_save_config_to_file "$config" "$output"; cat "$output"; rm "$output"; }
+sing_box_init_config''')
+                self.assertEqual(p.returncode, 0, p.stderr)
+                data = json.loads(p.stdout)
+                self.assertEqual(next(s for s in data['dns']['servers'] if s['tag'] == 'dns-server')['detour'], 'dns_only-out')
+                self.assertTrue(any(r.get('outbound') == 'dns_only-out' and 'service-mixed-in' in r.get('inbound', []) for r in data['route']['rules']))
+                for outbound in data['outbounds']:
+                    if outbound.get('server'):
+                        self.assertEqual(outbound['domain_resolver']['server'], 'bootstrap-dns-server')
+                        self.assertEqual(outbound['transport']['type'], 'xhttp')
+                    else:
+                        self.assertNotIn('domain_resolver', outbound)
+                engine = os.environ.get('UFI_TEST_ENGINE')
+                if engine:
+                    path = self.tmp / 'group-generated.json'
+                    path.write_text(json.dumps(data))
+                    check = subprocess.run(shlex.split(engine) + ['check', '-c', str(path)], capture_output=True, text=True)
+                    self.assertEqual(check.returncode, 0, check.stderr)
 
     def test_reload_restores_dhcp_before_starting_again(self):
         p = self.run_shell('', 'stop() { echo restore; }; start() { echo start; }; reload')
@@ -167,6 +196,59 @@ mod.configure(o, false);
         p = subprocess.run(['node', '-e', code, str(UI / 'ufi_sections.js')], capture_output=True, text=True)
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertIn('PASS', p.stdout)
+
+    def test_package_proxy_works_without_dns_tunnel_option(self):
+        cfg=self.proxy('packages')
+        p=self.run_shell(cfg, """config_set settings ufi_dns_proxy_section ''
+config_set settings download_lists_via_proxy 0
+config_set settings ufi_service_proxy 1
+ufi_prepare_runtime || exit 1
+config_get settings download_lists_via_proxy
+config_get settings download_lists_via_proxy_section""")
+        self.assertEqual(p.returncode,0,p.stderr)
+        self.assertEqual(p.stdout.splitlines(),['1','packages'])
+
+    def test_fakeip_rules_do_not_require_service_domain_and_ruleset_together(self):
+        for community in ('','discord'):
+            cfg=self.proxy('proxy')
+            if community:cfg += "\nlist community_lists '"+community+"'"
+            p=self.run_shell(cfg, """ufi_prepare_runtime || exit 1
+sing_box_save_config() { local output; output=$(mktemp); sing_box_cm_save_config_to_file "$config" "$output"; cat "$output"; rm "$output"; }
+sing_box_init_config""")
+            self.assertEqual(p.returncode,0,p.stderr)
+            data=json.loads(p.stdout)
+            rules=[r for r in data['dns']['rules'] if r.get('server')=='fakeip-server']
+            self.assertEqual(len(rules),2 if community else 1)
+            for rule in rules:
+                self.assertTrue(bool(rule.get('domain')) != bool(rule.get('rule_set')),rule)
+            engine=os.environ.get('UFI_TEST_ENGINE')
+            if engine:
+                path=self.tmp/'fakeip-generated.json';path.write_text(json.dumps(data))
+                check=subprocess.run(shlex.split(engine)+['check','-c',str(path)],capture_output=True,text=True)
+                self.assertEqual(check.returncode,0,check.stderr)
+
+    def test_proxy_list_check_skips_direct_dns_and_accepts_last_attempt(self):
+        p=self.run_shell(self.proxy('proxy'), """echo_count=0
+nslookup() { echo MUST-NOT-CALL-DIRECT-DNS >&2; return 1; }
+sleep() { :; }
+echolog() { printf '%s\\n' "$*" >&2; }
+curl() { echo_count=$((echo_count+1)); [ "$echo_count" -eq 10 ]; }
+ufi_each_section() { :; }
+list_update""")
+        self.assertEqual(p.returncode,0,p.stderr)
+        self.assertNotIn('MUST-NOT',p.stderr)
+        self.assertIn('completed successfully',p.stderr)
+
+    def test_failed_first_import_cannot_be_hidden_by_later_success(self):
+        p=self.run_shell(self.proxy('proxy'), """sleep() { :; }
+echolog() { printf '%s\\n' "$*" >&2; }
+curl() { return 0; }
+import_community_subnet_lists() { return 1; }
+import_domains_from_remote_domain_lists() { return 0; }
+import_subnets_from_remote_subnet_lists() { return 0; }
+list_update""")
+        self.assertNotEqual(p.returncode,0,p.stderr)
+        self.assertNotIn('completed successfully',p.stderr)
 
 
 if __name__ == '__main__':

@@ -26,8 +26,8 @@ class ReleaseTests(unittest.TestCase):
         fixtures(self.images)
         firmware_metadata(self.images)
         self.report = {
-            'status': 'passed', 'profile': 'UFI001C v3.1.2 Setup / OpenWrt 25.12.5',
-            'files_sha256': {dest: hashlib.sha256((PORT / source).read_bytes()).hexdigest()
+            'status': 'passed', 'profile': 'UFI001C v3.1.4 Services / OpenWrt 25.12.5',
+            'files_sha256': {dest: hashlib.sha256(package_release.source_bytes(source)).hexdigest()
                              for dest, source in package_release.FILES.items()}}
         self.save_report()
         (self.images / 'kernel-routing-check.txt').write_text('PASS: built kernel supports IPv4 policy routing for Podkop\n')

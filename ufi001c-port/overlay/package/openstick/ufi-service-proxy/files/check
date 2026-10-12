@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+case "${1:-}" in ''|--apk-update) ;; *) echo 'Usage: ufi-services-check [--apk-update]' >&2; exit 64;; esac
+mode=$(uci -q get podkop.settings.ufi_service_proxy || true)
+[ "${mode:-1}" = 1 ] || { echo 'Package/service proxy is disabled.' >&2; exit 2; }
+status=0
+for name in GitHub OpenWrt; do
+    case "$name" in
+        GitHub) url=https://api.github.com/repos/itdoginfo/podkop/releases/latest ;;
+        OpenWrt) url=https://downloads.openwrt.org/releases/25.12.5/packages/aarch64_generic/base/packages.adb ;;
+    esac
+    if /usr/libexec/ufi-service-fetch -fsSL --connect-timeout 8 --max-time 30 --output /dev/null --url "$url"; then
+        echo "$name via service proxy: PASS"
+    else
+        echo "$name via service proxy: FAIL"; status=1
+    fi
+done
+if [ "${1:-}" = --apk-update ]; then
+    if /usr/sbin/apk update; then echo 'APK index update: PASS'; else echo 'APK index update: FAIL'; status=1; fi
+fi
+exit "$status"

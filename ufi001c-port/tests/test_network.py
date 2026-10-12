@@ -169,6 +169,39 @@ sys.stdout.buffer.write(answer)
 ''')
         return data
 
+    def group_fixture(self):
+        data = copy.deepcopy(BASE)
+        data['outbounds'][0]['tag'] = 'proxy1'
+        other = copy.deepcopy(data['outbounds'][0]); other['tag'] = 'proxy2'
+        other['server'] = 'backup.example'
+        data['outbounds'] += [other,
+            {'tag':'pool', 'type':'urltest', 'outbounds':['proxy1'], 'fallbacks':['proxy2']},
+            {'tag':'dns_only-out', 'type':'selector', 'outbounds':['pool','proxy1','proxy2'], 'default':'pool'}]
+        return data
+
+    def test_dns_nested_proxy_groups_and_fallbacks_get_independent_bootstrap(self):
+        source = self.group_fixture()
+        p = transform(source)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        result = json.loads(p.stdout)
+        for o in result['outbounds'][:2]:
+            self.assertEqual(o['domain_resolver']['server'], 'bootstrap-dns-server')
+        self.assertEqual(result['outbounds'][2:], source['outbounds'][2:])
+        self.assertEqual(json.loads(transform(result).stdout), result)
+
+    def test_dns_groups_reject_cycles_missing_children_direct_fallbacks_and_duplicates(self):
+        for mode in ('cycle', 'missing', 'direct_fallback', 'duplicate', 'empty', 'bad_default', 'chained'):
+            data = self.group_fixture()
+            if mode == 'cycle': data['outbounds'][2]['outbounds'] = ['dns_only-out']
+            if mode == 'missing': data['outbounds'][2]['outbounds'] = ['absent']
+            if mode == 'direct_fallback': data['outbounds'][1]['type'] = 'direct'
+            if mode == 'duplicate': data['outbounds'].append(copy.deepcopy(data['outbounds'][0]))
+            if mode == 'empty': data['outbounds'][2]['outbounds'] = []
+            if mode == 'bad_default': data['outbounds'][3]['default'] = 'unrelated'
+            if mode == 'chained': data['outbounds'][1]['detour'] = 'proxy1'
+            with self.subTest(mode=mode):
+                self.assertNotEqual(transform(data).returncode, 0)
+
     def test_dns_probe_uses_proxy_and_validates_wire_response(self):
         self.dns_probe_fixture()
         for mode in ('ok', 'http_error', 'servfail', 'empty_answer', 'truncated'):
@@ -229,7 +262,7 @@ with (root / 'services.log').open('a') as out: out.write(pathlib.Path(__file__).
         for installed, source in gate.FILES.items():
             p = self.tmp / installed
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_bytes((PORT / source).read_bytes())
+            p.write_bytes(gate.source_bytes(source))
         header = bytearray(64)
         header[:5] = b'\x7fELF\x02'
         header[18:20] = b'\xb7\x00'

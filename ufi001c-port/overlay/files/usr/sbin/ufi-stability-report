@@ -1,0 +1,22 @@
+#!/bin/sh
+# Read-only snapshots. Does not reload the network or expose proxy credentials.
+echo 'UFI001C stability snapshot'
+date -u
+cat /etc/ufi001c-release 2>/dev/null
+cat /etc/ufi001c-stability-fix 2>/dev/null
+printf 'boot_id: '; cat /proc/sys/kernel/random/boot_id
+printf 'uptime_seconds: '; cut -d' ' -f1 /proc/uptime
+free
+printf 'gc_auto_restart: '; uci -q get gc.config.auto_restart || echo 'unset (disabled by fixed script)'
+/etc/init.d/hotplug-gcreboot enabled >/dev/null 2>&1 && echo 'hotplug_autostart: enabled' || echo 'hotplug_autostart: disabled'
+printf 'usb_gadget_creations_since_boot: '
+dmesg | grep -c 'configfs-gadget.*HOST MAC' || true
+printf 'sing_box_process: '; pidof sing-box 2>/dev/null || echo stopped
+for obj in $(ubus -t 3 list 'hostapd.*'); do
+    printf '%s: ' "$obj"
+    ubus -t 3 call "$obj" get_status | jsonfilter -e '@.status'
+done
+echo 'Kernel events (last 55 matching lines):'
+dmesg | grep -Ei 'reboot|panic|out of memory|oom-kill|fatal error|remoteproc.*(crash|recover)|wcn36xx|configfs-gadget.*HOST MAC|usb0.*(disabled|left)|phy0-ap0' | tail -55
+echo 'Service events (last 65 matching lines):'
+logread | grep -Ei 'ufi-care|ufi-gc|hostapd.*(AP-|DISABL|ENABL|DEAUTH|DISASSOC)|sing-box.*(INTERNAL_ERROR|FATAL)|podkop.*(fatal|error|DNS and list)' | tail -65

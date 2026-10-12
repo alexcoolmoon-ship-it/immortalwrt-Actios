@@ -1,5 +1,5 @@
 #!/bin/sh
-# UFI001C / Podkop 0.7.23: DNS via one existing proxy outbound, v3.1.2.
+# UFI001C / Podkop 0.7.23: DNS via a proxy or proxy-only group, v3.1.3.
 # MIT; local backups can contain private proxy credentials (mode 0600).
 set -eu
 umask 077
@@ -16,15 +16,30 @@ filter_config() {
     fi
     case "$section" in *[!A-Za-z0-9_]*|'') die "Invalid section name";; esac
     jq -e --arg tag "$section-out" '
-        if ([.outbounds[]? | select(.tag == $tag)] | length) != 1 then
-            error("DNS proxy outbound is missing or duplicated")
-        elif ([.outbounds[] | select(.tag == $tag and
-            (.type == "vless" or .type == "trojan" or .type == "shadowsocks" or
-             .type == "vmess" or .type == "socks" or .type == "http" or
-             .type == "hysteria2" or .type == "tuic" or .type == "anytls") and
-            ((.server // "") | length > 0) and ((.detour // "") == ""))] | length) != 1 then
-            error("Choose one proxy URL; direct, VPN, selector and chained outbounds are not supported by this hotfix")
-        elif ([.dns.servers[]? | select(.tag == "dns-server")] | length) != 1 or
+        def proxy_leaves($cfg; $name; $seen):
+            if ($name | type) != "string" or ($seen | index($name)) != null or ($seen | length) >= 16 then
+                error("Invalid or cyclic DNS proxy group")
+            else
+                [$cfg.outbounds[]? | select(.tag == $name)] as $hits |
+                if ($hits | length) != 1 then error("DNS proxy outbound is missing or duplicated")
+                else $hits[0] as $o |
+                    if (($o.detour // "") != "") then error("Chained DNS proxy outbounds are not supported")
+                    elif $o.type == "selector" or $o.type == "urltest" then
+                        if ($o.outbounds | type) != "array" or ($o.outbounds | length) == 0 or
+                           (($o.fallbacks // []) | type) != "array" then error("Empty or invalid DNS proxy group")
+                        else
+                            ($o.outbounds + ($o.fallbacks // [])) as $children |
+                            if ($o.type == "selector" and (($o.default // "") != "") and
+                                ($children | index($o.default)) == null) then error("Invalid DNS selector default")
+                            else [$children[] | proxy_leaves($cfg; .; $seen + [$name])[]] | unique end
+                        end
+                    elif (["vless","trojan","shadowsocks","vmess","socks","http","hysteria2","tuic","anytls"] | index($o.type)) != null and
+                         (($o.server // "") | type) == "string" and (($o.server // "") | length) > 0 then [$name]
+                    else error("DNS group must contain proxies only; direct and VPN outbounds are not supported") end
+                end
+            end;
+        . as $cfg | proxy_leaves($cfg; $tag; []) as $leaves |
+        if ([.dns.servers[]? | select(.tag == "dns-server")] | length) != 1 or
              ([.dns.servers[]? | select(.tag == "bootstrap-dns-server")] | length) != 1 then
             error("Unexpected Podkop DNS configuration")
         else
@@ -32,7 +47,7 @@ filter_config() {
                 (.detour = $tag | del(.domain_resolver, .bind_interface)) |
             (.dns.servers[] | select(.tag == "bootstrap-dns-server")) |=
                 del(.detour, .domain_resolver) |
-            (.outbounds[] | select(.tag == $tag)).domain_resolver =
+            (.outbounds[] | select(.tag as $t | ($leaves | index($t)) != null)).domain_resolver =
                 {server: "bootstrap-dns-server", strategy: "ipv4_only"} |
             if .route.rule_set then
                 .route.rule_set |= map(if .type == "remote" then .download_detour = $tag else . end)

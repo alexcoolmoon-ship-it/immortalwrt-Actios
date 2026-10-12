@@ -1,0 +1,41 @@
+{
+  "commit": "6d0586f2900fb283614da5348ab69276cd32dcbd",
+  "files": {
+    "etc/init.d/hotplug-gcreboot": {
+      "source": "overlay/package/openstick/gc/files/hotplug-gcreboot.init",
+      "old_sha256": "747fa1769c0da87e8524124b496fb556d8a079f445705455a7c6736f3a85d3a3",
+      "mode": "755"
+    },
+    "etc/hotplug.d/gcrestart/restart_gc.sh": {
+      "source": "overlay/package/openstick/gc/files/restart_gc.sh",
+      "old_sha256": "68853f9c93845fcfa49f79754ba827ea594ec2b3e40037c56cbfa7f6de478064",
+      "mode": "755"
+    },
+    "usr/lib/podkop/ufi_startup.sh": {
+      "source": "overlay/package/openstick/podkop/files/usr/lib/ufi_startup.sh",
+      "old_sha256": "de3b8ee73f49894957258bcc2bca09f05190ae5f31e508ce4572d5abd488a269",
+      "mode": "755"
+    },
+    "usr/lib/podkop/ufi_dns_tunnel.sh": {
+      "source": "overlay/package/openstick/podkop/files/usr/lib/ufi_dns_tunnel.sh",
+      "old_sha256": "7c3b7f5a62a8ad9a88c92e89e9a601ecc86bd144bca01dea50e2dcf8255f70d8",
+      "mode": "755"
+    },
+    "www/luci-static/resources/view/podkop/ufi_sections.js": {
+      "source": "overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/ufi_sections.js",
+      "old_sha256": "fcca67e8aec7a20509dc5616bb2ec3f30d4e6a6dc67ec4d71ecc7365f44a4dda",
+      "mode": "644",
+      "minified_sha256": "931651726ef41ac9ed1444dccc70c9e5c0c9d04af38f674a8c26b9cd01e329c6"
+    },
+    "usr/sbin/ufi-stability-report": {
+      "source": "overlay/files/usr/sbin/ufi-stability-report",
+      "old_sha256": "NEW",
+      "mode": "755"
+    },
+    "etc/ufi001c-stability-fix": {
+      "source": "stability-hotfix/marker.txt",
+      "old_sha256": "NEW",
+      "mode": "644"
+    }
+  }
+}

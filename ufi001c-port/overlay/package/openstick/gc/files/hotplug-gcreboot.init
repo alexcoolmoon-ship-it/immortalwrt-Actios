@@ -8,6 +8,9 @@ USE_PROCD=1
 PROG=/sbin/procd
 
 start_service() {
+    # A USB disconnect is not evidence that the gadget needs rebuilding.
+    # Rebuilding changes extcon state again and can form a restart loop.
+    [ "$(uci -q get gc.config.auto_restart)" = 1 ] || return 0
     procd_open_instance "hotplug_gcreboot"
     
     procd_set_param command "$PROG" -h /etc/hotplug-gcreboot.json
@@ -19,7 +22,7 @@ start_service() {
 }
 
 stop_service() {
-    pkill -f "procd.*-h.*hotplug-gcreboot" 2>/dev/null
+    pkill -f "procd.*-h.*hotplug-gcreboot" 2>/dev/null || true
 }
 
 reload_service() {

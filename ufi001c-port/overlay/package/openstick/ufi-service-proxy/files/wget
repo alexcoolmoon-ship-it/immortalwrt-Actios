@@ -1,0 +1,20 @@
+#!/bin/sh
+# Only used by the pinned APK wget backend. Preserve URL/output/timeout semantics.
+set -eu
+url= output=- timeout=30
+bad() { echo "Unsupported APK download argument: $*" >&2; exit 64; }
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -q) shift ;;
+        -T) [ "$#" -ge 2 ] || bad "$1"; timeout=$2; shift 2 ;;
+        -O) [ "$#" -ge 2 ] || bad "$1"; output=$2; shift 2 ;;
+        --no-check-certificate) bad 'TLS verification must stay enabled' ;;
+        http://*|https://*) [ -z "$url" ] || bad 'multiple URLs'; url=$1; shift ;;
+        *) bad "$1" ;;
+    esac
+done
+[ -n "$url" ] || bad 'missing URL'
+case "$timeout" in ''|*[!0-9]*|0) bad 'invalid timeout';; esac
+redirects='=http,https'
+case "$url" in https://*) redirects='=https';; esac
+exec /usr/libexec/ufi-service-fetch --fail --location --silent --show-error     --proto '=http,https' --proto-redir "$redirects"     --connect-timeout "$timeout" --speed-limit 1 --speed-time "$timeout"     --output "$output" --url "$url"

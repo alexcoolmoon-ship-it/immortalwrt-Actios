@@ -31,7 +31,7 @@ update = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(update)
 from radio_backup import read_at, read_gpt, copy_and_hash
 
-VERSION = '3.0-rc1'
+VERSION = '3.1.4-rc1'
 SECTOR = 512
 GIB = 1024**3
 NV = ('modemst1', 'modemst2', 'fsg', 'fsc', 'sec')
@@ -43,7 +43,8 @@ LIMITS = {'boot.img': 64*1024**2, 'system.img': GIB,
           'xhttp-validation.json': 65536, 'addons.lock.json': 65536,
           'routing-rootfs-check.json': 65536, 'kernel-routing-check.txt': 16384,
           'validation.json': 65536, 'release-info.json': 16384,
-          'INSTALL-RU.md': 65536, 'VALIDATION-v3.1.2.md': 65536}
+          'INSTALL-RU.md': 65536, 'VALIDATION-v3.1.2.md': 65536,
+          'VALIDATION-v3.1.3.md': 65536, 'VALIDATION-v3.1.4.md': 65536}
 
 
 def digest_bytes(data):
@@ -59,8 +60,36 @@ def save_json(path, value):
     tmp.replace(path)
 
 
-def load_profile(base):
-    return json.loads((Path(base) / 'stock-profile.json').read_text(encoding='utf-8'))
+def load_profile(base, profile_id=None):
+    if profile_id is None:
+        return json.loads((Path(base) / 'stock-profile.json').read_text(encoding='utf-8'))
+    profiles = [json.loads(p.read_text(encoding='utf-8'))
+                for p in sorted(Path(base).glob('stock-profile*.json'))]
+    matches = [p for p in profiles if p['id'] == profile_id]
+    if len(matches) != 1:
+        raise ValueError('Unknown/duplicate stock profile: ' + str(profile_id))
+    return matches[0]
+
+
+def preview_profile(preview, base):
+    """Match exact known geometry after CRC validation, never resize a profile.
+
+    Capacity here is only the GPT claim. check_stock() independently checks the
+    complete physical dump length and both GPT copies before permitting writes.
+    """
+    data = Path(preview).read_bytes()
+    if len(data) != 34*SECTOR or data[SECTOR:SECTOR+8] != b'EFI PART':
+        raise ValueError('Incomplete/invalid primary GPT read; no writes performed')
+    disk_bytes = (struct.unpack_from('<Q', data, SECTOR+32)[0] + 1)*SECTOR
+    parts = read_gpt(io.BytesIO(data), disk_bytes, SECTOR)
+    geometry = [[p['name'], p['first_lba'], p['last_lba']] for p in parts]
+    profiles = [json.loads(p.read_text(encoding='utf-8'))
+                for p in sorted(Path(base).glob('stock-profile*.json'))]
+    matches = [p for p in profiles if p['disk_bytes'] == disk_bytes and p['geometry'] == geometry]
+    if len(matches) != 1:
+        raise ValueError(f'Неизвестная заводская разметка ({disk_bytes} байт по GPT). '
+                         'Запись не началась. Сохраните stock-gpt-preview.bin и edl.log.')
+    return matches[0]
 
 
 def validate_gpt(dump, disk_bytes=None):
@@ -424,15 +453,15 @@ def confirm(text, word):
 
 
 def install(args):
-    base = HERE / 'stock-base'; profile = load_profile(base); check_base(base)
+    base = HERE / 'stock-base'; check_base(base)
     source = args.firmware or (HERE if (HERE/'boot.img').is_file() and (HERE/'system.img').is_file()
                               else select_path('Выберите ZIP успешной сборки UFI001C v3 XHTTP', Path.home()/'Downloads'))
     run = new_run(args.backups)
     print('Резервная копия и журнал: ' + str(run), flush=True)
     # A full backup plus rootfs preparation/readback needs substantially more
     # space than the compressed firmware ZIP.
-    if shutil.disk_usage(run).free < profile['disk_bytes'] + 4*GIB:
-        raise ValueError('Нужно не менее 12 ГБ свободного места на диске с бэкапом')
+    if shutil.disk_usage(run).free < 3*GIB:
+        raise ValueError('Нужно не менее 3 ГБ для подготовки образов; место под бэкап проверяется после чтения GPT')
     images = firmware_files(source, run / 'images')
     work = run / 'prepared'; work.mkdir()
     prepared = update.prepare_images(images, work)
@@ -442,10 +471,10 @@ def install(args):
     input('После подключения нажмите Enter. Сначала выполняется только чтение: ')
     preview = run / 'stock-gpt-preview.bin'
     edl('rs', 0, 34, preview)
-    preview_parts = read_gpt(io.BytesIO(preview.read_bytes()), profile['disk_bytes'], SECTOR)
-    geometry = [[p['name'], p['first_lba'], p['last_lba']] for p in preview_parts]
-    if geometry != profile['geometry']:
-        raise ValueError('Этот запуск предназначен для заводского UFI001C. Текущая разметка другая; запись не началась.')
+    profile = preview_profile(preview, base)
+    print(f"Найден профиль: {profile['id']}, {profile['disk_bytes']} байт. Проверка радио ещё впереди.", flush=True)
+    if shutil.disk_usage(run).free < profile['disk_bytes'] + 4*GIB:
+        raise ValueError(f"Нужно ещё не менее {(profile['disk_bytes']+4*GIB+GIB-1)//GIB} ГиБ свободного места под бэкап и проверку")
     dump = run / 'emmc.bin'
     print('Чтение всей заводской памяти. Может занять 10–20 минут. Журнал: edl.log', flush=True)
     edl('rf', dump)
@@ -461,11 +490,11 @@ def install(args):
     writes, stock, _ = make_plan(dump, profile, base, work, prepared)
     save_json(run / 'write-plan.json', writes)
     bind_device(edl, dump, stock, work)
-    confirm('Найден известный заводской профиль UFI001C / UFI001BC 20211121, 8 ГБ.\n'
+    confirm(f"Проверен заводской профиль {profile['id']}.\n"
             'Проверьте маркировку платы: UFI001C. Одинакового корпуса недостаточно.\n'
             'Будут заменены разметка, загрузчики и система. Заводские настройки\n'
             'станут недоступны; индивидуальные NV этого модема перенесутся из бэкапа.\n'
-            'Это первая аппаратная проверка автоматического перехода RC1 со стока.\n'
+            'Автоматический переход — кандидат: аппаратная проверка этой ревизии ещё нужна.\n'
             'Поддерживайте питание до завершения. Откат: RESTORE.cmd и этот emmc.bin.', 'UFI001C')
     bind_device(edl, dump, stock, work)  # also binds device after the user prompt
     execute_plan(edl, writes, journal, work)
@@ -481,7 +510,7 @@ def install(args):
 
 
 PACKAGE_FILES = ('stock_install.py', 'ufi-install.py', 'radio_backup.py',
-                 'INSTALL.cmd', 'RESTORE.cmd', 'MAKE-BUNDLE.cmd',
+                 'INSTALL.cmd', 'RESTORE.cmd', 'MAKE-BUNDLE.cmd', 'STOCK-CHECK.cmd',
                  'README-STOCK-RU.md', 'VALIDATION-STOCK.md', 'BASE-SOURCES.md')
 
 
@@ -522,19 +551,19 @@ def bundle(args):
 
 
 def restore(args):
-    profile = load_profile(HERE / 'stock-base')
     dump = args.backup or select_path('Выберите заводской emmc.bin ЭТОГО модема', args.backups, 'backup')
     dump = Path(dump).resolve(strict=True)
     report = json.loads((dump.parent / 'install.json').read_text(encoding='utf-8'))
-    if report.get('format') != 1 or report.get('profile') != profile['id']:
+    if report.get('format') != 1:
         raise ValueError('This is not a stock backup made by this installer')
+    profile = load_profile(HERE / 'stock-base', report.get('profile', ''))
     if dump.stat().st_size != report['backup_bytes'] or update.sha(dump) != report['backup_sha256']:
         raise ValueError('Backup checksum mismatch; restoration refused')
     stock, hashes = check_stock(dump, profile)
     if hashes != report['nv_sha256']: raise ValueError('Backup NV report mismatch')
     work = new_run(dump.parent / 'restore-logs')
     if shutil.disk_usage(work).free < dump.stat().st_size + GIB:
-        raise ValueError('Need at least 9 GB free for a full restoration readback')
+        raise ValueError(f"Need {(dump.stat().st_size+2*GIB-1)//GIB} GiB free for full restoration readback")
     edl = EDL(args.edl_root, work / 'edl.log')
     print('Подключите только этот модем с зажатой кнопкой (EDL), затем отпустите её.')
     input('Нажмите Enter для проверки принадлежности бэкапа: ')
@@ -555,9 +584,45 @@ def restore(args):
     print('СТОК ВОССТАНОВЛЕН И СВЕРЕН. Переподключите USB без кнопки.', flush=True)
 
 
+def probe(args):
+    """Read only GPT copies and factory radio; never read or export NV data."""
+    run = new_run(args.backups)
+    print('Диагностика без прошивки: ' + str(run), flush=True)
+    print('Подключите только стоковый модем с зажатой кнопкой, затем отпустите её.')
+    input('Нажмите Enter для чтения GPT и контрольной суммы радио: ')
+    edl = EDL(args.edl_root, run / 'edl.log')
+    primary = run / 'stock-gpt-preview.bin'
+    edl('rs', 0, 34, primary)
+    profile = preview_profile(primary, HERE / 'stock-base')
+    size = profile['disk_bytes']
+    secondary = run / 'stock-gpt-secondary.bin'
+    edl('rs', size//SECTOR-33, 33, secondary)
+    if secondary.stat().st_size != 33*SECTOR:
+        raise ValueError('Incomplete secondary GPT read')
+    parts = validate_gpt(GPTView(size, primary.read_bytes(), secondary.read_bytes()), size)
+    radio = run / 'stock-radio.bin'
+    edl('rs', parts['modem']['first_lba'], parts['modem']['size_bytes']//SECTOR, radio)
+    if radio.stat().st_size != parts['modem']['size_bytes']:
+        raise ValueError('Incomplete factory radio read')
+    digest = update.sha(radio)
+    report = {'installer': VERSION, 'profile': profile['id'], 'gpt_disk_bytes': size,
+              'gpt_copies': 'CRC and table equality verified', 'stock_modem_sha256': digest,
+              'stock_modem_hash_matches': digest == profile['stock_modem_sha256'],
+              'writes_performed': False, 'full_backup_created': False,
+              'hardware_boot_test': 'pending',
+              'next_step': 'Full backup, physical capacity and own NV checks are still mandatory during install.'}
+    output = args.output or run / 'stock-probe.json'
+    if Path(output).exists(): raise ValueError('Report already exists: ' + str(output))
+    save_json(output, report)
+    print(json.dumps(report, indent=2, ensure_ascii=False), flush=True)
+    print('ОТЧЁТ: ' + str(output) + '\nЗаписи в память модема не было. Полный бэкап ещё не создан.', flush=True)
+    if not report['stock_modem_hash_matches']:
+        raise ValueError('Другая радиопрошивка. Пришлите только stock-probe.json; установщик сохраняет запрет записи.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['install', 'restore', 'bundle'])
+    parser.add_argument('action', choices=['install', 'restore', 'bundle', 'probe'])
     parser.add_argument('--version', action='version', version='UFI stock installer '+VERSION)
     parser.add_argument('--edl-root', type=Path, default=Path(os.environ.get('UFI_EDL_ROOT', str(Path.home()/'edl'))))
     parser.add_argument('--backups', type=Path, default=Path.home()/'UFI001C-backups')
@@ -567,7 +632,7 @@ def main():
     args = parser.parse_args()
     print('UFI001C: простой переход со стока — '+VERSION, flush=True)
     try:
-        {'install': install, 'restore': restore, 'bundle': bundle}[args.action](args)
+        {'install': install, 'restore': restore, 'bundle': bundle, 'probe': probe}[args.action](args)
     except (OSError, ValueError, EOFError, zipfile.BadZipFile, subprocess.CalledProcessError) as exc:
         print('\nSTOP: '+str(exc)+'\nЕсли запись уже начиналась, сохраните EDL и используйте RESTORE.cmd.\n'
               'Бэкапы находятся в '+str(args.backups)+'. Не удаляйте их.', file=sys.stderr)

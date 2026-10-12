@@ -5,7 +5,7 @@ function candidates(data, dnsOnly) {
   return data.sections("podkop", "section").filter(function (section) {
     const kind = section.connection_type || "proxy";
     if (dnsOnly) {
-      return kind === "proxy" && ["url", "outbound"].includes(section.proxy_config_type || "url");
+      return kind === "proxy" && ["url", "outbound", "selector", "urltest"].includes(section.proxy_config_type || "url");
     }
     return kind === "proxy" || kind === "vpn";
   }).map(function (section) { return section[".name"]; });

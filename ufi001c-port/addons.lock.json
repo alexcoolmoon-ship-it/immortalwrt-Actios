@@ -1,8 +1,8 @@
 {
   "podkop": {
-    "tag": "0.7.23",
+    "tag": "0.7.24",
     "source": "https://github.com/itdoginfo/podkop",
-    "source_archive_sha256": "8dd41e9b093639e02f67fa5b852ad859b517c665d8a4734f8e125fd0a268eadf"
+    "source_archive_sha256": "a786c9af865ab5c601bf9533072f9b85abe1076a676547265c7f023f8c339bf1"
   },
   "zapret": {
     "tag": "v72.13",

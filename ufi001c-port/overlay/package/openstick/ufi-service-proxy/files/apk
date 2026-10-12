@@ -1,0 +1,5 @@
+#!/bin/sh
+# APK's wget backend sees this private adapter; its signature checks are unchanged.
+PATH=/usr/libexec/ufi-package-bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+exec /usr/bin/apk "$@"

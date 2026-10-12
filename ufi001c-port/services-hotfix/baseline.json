@@ -1,0 +1,166 @@
+{
+  "commit": "6d0586f2900fb283614da5348ab69276cd32dcbd",
+  "files": {
+    "etc/init.d/hotplug-gcreboot": {
+      "source": "overlay/package/openstick/gc/files/hotplug-gcreboot.init",
+      "allowed_sha256": [
+        "30c1eaa86aaa4ba0eb98b1644bb3297c3a47f2339a2950d0abd1ce5d5da951ad",
+        "747fa1769c0da87e8524124b496fb556d8a079f445705455a7c6736f3a85d3a3"
+      ],
+      "mode": "755"
+    },
+    "etc/hotplug.d/gcrestart/restart_gc.sh": {
+      "source": "overlay/package/openstick/gc/files/restart_gc.sh",
+      "allowed_sha256": [
+        "68853f9c93845fcfa49f79754ba827ea594ec2b3e40037c56cbfa7f6de478064",
+        "85c9ec665c614caff4b9c38f653346671f21b07a1af4734a0bc4223ba6435209"
+      ],
+      "mode": "755"
+    },
+    "usr/sbin/ufi-stability-report": {
+      "source": "overlay/files/usr/sbin/ufi-stability-report",
+      "allowed_sha256": [
+        "71881dd2666946652f626af92af295684949a597ce7f6d6b11e5a66a8f1bdb04",
+        "NEW"
+      ],
+      "mode": "755"
+    },
+    "usr/bin/podkop": {
+      "source": "overlay/package/openstick/podkop/files/usr/bin/podkop",
+      "allowed_sha256": [
+        "9338f63c70b63748a76d6c8f4a90497e5d59d8fcbfafdce2e37547fb43a8e712"
+      ],
+      "mode": "755"
+    },
+    "usr/lib/podkop/ufi_dns_tunnel.sh": {
+      "source": "overlay/package/openstick/podkop/files/usr/lib/ufi_dns_tunnel.sh",
+      "allowed_sha256": [
+        "63d079ba5e3c37914b46acb1fa111e47b0135ba5428cded0f399c58b9a15641c",
+        "7c3b7f5a62a8ad9a88c92e89e9a601ecc86bd144bca01dea50e2dcf8255f70d8"
+      ],
+      "mode": "755"
+    },
+    "usr/lib/podkop/ufi_policy_routing.sh": {
+      "source": "overlay/package/openstick/podkop/files/usr/lib/ufi_policy_routing.sh",
+      "allowed_sha256": [
+        "c59daea7672b0e8733ca4c63b2597d0e9c53bf821663c36a975b2255c6c4737b"
+      ],
+      "mode": "755"
+    },
+    "usr/lib/podkop/ufi_startup.sh": {
+      "source": "overlay/package/openstick/podkop/files/usr/lib/ufi_startup.sh",
+      "allowed_sha256": [
+        "683f72993edeacab5c08ca8ba499f2b1cd64da336acf347e134fb4cd10a8040a",
+        "de3b8ee73f49894957258bcc2bca09f05190ae5f31e508ce4572d5abd488a269"
+      ],
+      "mode": "755"
+    },
+    "usr/lib/podkop/ufi_fakeip_check.sh": {
+      "source": "overlay/package/openstick/podkop/files/usr/lib/ufi_fakeip_check.sh",
+      "allowed_sha256": [
+        "cf14d73828db9d2830f67b4cc09af32190880388f720910dfcad91fd946df9ff"
+      ],
+      "mode": "755"
+    },
+    "www/luci-static/resources/view/podkop/main.js": {
+      "source": "overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js",
+      "allowed_sha256": [
+        "7b6b25f3786cdd3aa3a9e17cf663e0a15132358584587e6359bd3f9acd7f740d"
+      ],
+      "mode": "644"
+    },
+    "www/luci-static/resources/view/podkop/settings.js": {
+      "source": "overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js",
+      "allowed_sha256": [
+        "2fa28f0eb3924fcb2e2d6567b2a09f521ddaca6343bf55cb85b67166c7840a96"
+      ],
+      "mode": "644"
+    },
+    "www/luci-static/resources/view/podkop/ufi_sections.js": {
+      "source": "overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/ufi_sections.js",
+      "allowed_sha256": [
+        "931651726ef41ac9ed1444dccc70c9e5c0c9d04af38f674a8c26b9cd01e329c6",
+        "9ca2ccc1eb895e6dea05ee507ec71b930dc958d3e19d7fa58e1a80be1e02421c",
+        "fcca67e8aec7a20509dc5616bb2ec3f30d4e6a6dc67ec4d71ecc7365f44a4dda"
+      ],
+      "mode": "644"
+    },
+    "usr/sbin/apk": {
+      "source": "overlay/package/openstick/ufi-service-proxy/files/apk",
+      "allowed_sha256": [
+        "NEW"
+      ],
+      "mode": "755"
+    },
+    "usr/libexec/ufi-service-fetch": {
+      "source": "overlay/package/openstick/ufi-service-proxy/files/fetch",
+      "allowed_sha256": [
+        "NEW"
+      ],
+      "mode": "755"
+    },
+    "usr/libexec/ufi-package-bin/wget": {
+      "source": "overlay/package/openstick/ufi-service-proxy/files/wget",
+      "allowed_sha256": [
+        "NEW"
+      ],
+      "mode": "755"
+    },
+    "usr/share/ufi-service-proxy/ready.jq": {
+      "source": "overlay/package/openstick/ufi-service-proxy/files/ready.jq",
+      "allowed_sha256": [
+        "NEW"
+      ],
+      "mode": "644"
+    },
+    "usr/sbin/ufi-services-check": {
+      "source": "overlay/package/openstick/ufi-service-proxy/files/check",
+      "allowed_sha256": [
+        "NEW"
+      ],
+      "mode": "755"
+    },
+    "usr/libexec/package-manager-call": {
+      "source": "feed-overrides/luci/applications/luci-app-package-manager/root/usr/libexec/package-manager-call",
+      "allowed_sha256": [
+        "3cb9f991ce4ca92ef4c394ae663e513e3154ac9984806118cc061c735c2eb1f5"
+      ],
+      "mode": "755"
+    },
+    "usr/lib/podkop/constants.sh": {
+      "source": "overlay/package/openstick/podkop/files/usr/lib/constants.sh",
+      "allowed_sha256": [
+        "96565cbf3ddf1ba2a0fb2ae21d18fd205c187cc6c0040f067c7f1fe6a568d270"
+      ],
+      "mode": "755"
+    },
+    "usr/lib/podkop/helpers.sh": {
+      "source": "overlay/package/openstick/podkop/files/usr/lib/helpers.sh",
+      "allowed_sha256": [
+        "90a05e8ccf97c3198949e8e14af3fb5bf64bc7a82551e905f8b5720d10d20b9e"
+      ],
+      "mode": "755"
+    },
+    "usr/lib/podkop/sing_box_config_manager.sh": {
+      "source": "overlay/package/openstick/podkop/files/usr/lib/sing_box_config_manager.sh",
+      "allowed_sha256": [
+        "1a64008ebfb2b6ba8fef359b5a77592cb0af3a9f789b26ed07bda9b3bc32fc1c"
+      ],
+      "mode": "755"
+    },
+    "www/luci-static/resources/view/podkop/podkop.js": {
+      "source": "overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/podkop.js",
+      "allowed_sha256": [
+        "0a0a91010194c0fc500ccecc453a6bab6ed92478c63e19d89d413e4fce486712"
+      ],
+      "mode": "644"
+    },
+    "etc/ufi001c-services-fix": {
+      "source": "services-hotfix/marker.txt",
+      "allowed_sha256": [
+        "NEW"
+      ],
+      "mode": "644"
+    }
+  }
+}

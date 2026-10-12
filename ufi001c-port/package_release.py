@@ -10,18 +10,18 @@ import sys
 PORT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PORT / 'migration'))
 import stock_install
-from check_rootfs import FILES
+from check_rootfs import FILES, source_bytes
 
-VERSION = '3.1.2'
+VERSION = '3.1.4'
 
 
 def check_reports(images):
     images = Path(images)
     rootfs = json.loads((images / 'routing-rootfs-check.json').read_text())
-    if rootfs.get('status') != 'passed' or rootfs.get('profile') != 'UFI001C v3.1.2 Setup / OpenWrt 25.12.5':
-        raise ValueError('Missing/wrong v3.1.2 rootfs report')
+    if rootfs.get('status') != 'passed' or rootfs.get('profile') != 'UFI001C v3.1.4 Services / OpenWrt 25.12.5':
+        raise ValueError('Missing/wrong v3.1.4 rootfs report')
     for installed, source in FILES.items():
-        actual = hashlib.sha256((PORT / source).read_bytes()).hexdigest()
+        actual = hashlib.sha256(source_bytes(source)).hexdigest()
         if rootfs.get('files_sha256', {}).get(installed) != actual:
             raise ValueError('Rootfs report is from different source: ' + installed)
     if (images / 'kernel-routing-check.txt').read_text().strip() != 'PASS: built kernel supports IPv4 policy routing for Podkop':

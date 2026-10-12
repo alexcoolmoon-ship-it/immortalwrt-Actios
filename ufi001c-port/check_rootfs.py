@@ -7,6 +7,10 @@ import sys
 
 PORT = Path(__file__).resolve().parent
 FILES = {
+    'etc/init.d/hotplug-gcreboot': 'overlay/package/openstick/gc/files/hotplug-gcreboot.init',
+    'etc/hotplug.d/gcrestart/restart_gc.sh': 'overlay/package/openstick/gc/files/restart_gc.sh',
+    'etc/config/gc': 'overlay/package/openstick/gc/files/gc.uci',
+    'usr/sbin/ufi-stability-report': 'overlay/files/usr/sbin/ufi-stability-report',
     'etc/ufi001c-release': 'overlay/files/etc/ufi001c-release',
     'usr/bin/podkop': 'overlay/package/openstick/podkop/files/usr/bin/podkop',
     'usr/lib/podkop/ufi_dns_tunnel.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_dns_tunnel.sh',
@@ -17,13 +21,31 @@ FILES = {
     'www/luci-static/resources/view/podkop/settings.js': 'overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js',
     'www/luci-static/resources/view/podkop/ufi_sections.js': 'overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/ufi_sections.js',
     'etc/uci-defaults/99-ufi001c-addons': 'overlay/package/openstick/ufi001c-defaults/files/99-ufi001c-addons',
+    'usr/sbin/apk': 'overlay/package/openstick/ufi-service-proxy/files/apk',
+    'usr/libexec/ufi-service-fetch': 'overlay/package/openstick/ufi-service-proxy/files/fetch',
+    'usr/libexec/ufi-package-bin/wget': 'overlay/package/openstick/ufi-service-proxy/files/wget',
+    'usr/share/ufi-service-proxy/ready.jq': 'overlay/package/openstick/ufi-service-proxy/files/ready.jq',
+    'usr/sbin/ufi-services-check': 'overlay/package/openstick/ufi-service-proxy/files/check',
+    'usr/libexec/package-manager-call': 'feed-overrides/luci/applications/luci-app-package-manager/root/usr/libexec/package-manager-call',
+    'usr/lib/podkop/constants.sh': 'overlay/package/openstick/podkop/files/usr/lib/constants.sh',
+    'usr/lib/podkop/helpers.sh': 'overlay/package/openstick/podkop/files/usr/lib/helpers.sh',
+    'usr/lib/podkop/sing_box_config_manager.sh': 'overlay/package/openstick/podkop/files/usr/lib/sing_box_config_manager.sh',
+    'www/luci-static/resources/view/podkop/podkop.js': 'overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/podkop.js',
 }
+
+
+def source_bytes(source):
+    data = (PORT / source).read_bytes()
+    if source.endswith('/constants.sh'):
+        version = json.loads((PORT / 'addons.lock.json').read_text())['podkop']['tag']
+        data = data.replace(b'__COMPILED_VERSION_VARIABLE__', version.encode())
+    return data
 
 
 def verify(root):
     hashes = {}
     for installed, source in FILES.items():
-        expected = (PORT / source).read_bytes()
+        expected = source_bytes(source)
         path = root / installed
         if not path.is_file() or path.read_bytes() != expected:
             raise ValueError('Missing/stale release file in rootfs: ' + installed)
