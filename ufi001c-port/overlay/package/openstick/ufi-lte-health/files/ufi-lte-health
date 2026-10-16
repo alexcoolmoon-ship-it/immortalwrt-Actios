@@ -1,0 +1,136 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# Recover only a confirmed static IPv4 bearer; never reboot, change radio, DNS,
+# LAN/Wi-Fi, or flush routing tables. State/cooldown use monotonic uptime.
+set -eu
+state=/var/run/ufi-lte-health.state
+lock=/var/run/ufi-lte-health.lock
+filter=/usr/share/ufi-lte-health/session.jq
+reason='not checked'
+say() { printf '%s\n' "LTE: $*"; }
+cfg() { uci -q get "$1" 2>/dev/null || true; }
+
+eligible() {
+    [ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = 'thwc,ufi001c' ] || { reason='unsupported board'; return 1; }
+    [ "$(cfg network.modem.proto)" = modemmanager ] &&
+    [ "$(cfg network.modem.device)" = qcom-soc ] || { reason='different modem configuration'; return 1; }
+    for key in auto autoconnect defaultroute; do
+        [ "$(cfg network.modem.$key)" != 0 ] || { reason="modem $key disabled"; return 1; }
+    done
+    case "$(cfg network.modem.ip4table)" in
+        ''|0|254|main) ;; *) reason='custom routing table; automatic repair skipped'; return 1 ;;
+    esac
+    session=$(ubus -t 5 call network.interface.modem status 2>/dev/null |
+        jq -ceS -f "$filter") || { reason='modem is down, reconnecting, or has no unambiguous IPv4 session'; return 1; }
+    dev=$(printf '%s' "$session" | jq -r .dev)
+    address=$(printf '%s' "$session" | jq -r .address)
+    prefix=$(printf '%s' "$session" | jq -r .prefix)
+    gateway=$(printf '%s' "$session" | jq -r .gateway)
+    metric=$(printf '%s' "$session" | jq -r .metric)
+}
+
+kernel_state() {
+    link=$(ip -j link show dev "$dev" 2>/dev/null) || { reason='kernel device missing'; return 1; }
+    addrs=$(ip -j -4 address show dev "$dev" 2>/dev/null) || { reason='cannot read kernel address'; return 1; }
+    routes=$(ip -j -4 route show table 254 default dev "$dev" 2>/dev/null) || { reason='cannot read kernel routes'; return 1; }
+    # Reject another owner's global address/route instead of overwriting it.
+    printf '%s' "$addrs" | jq -e --arg a "$address" --argjson p "$prefix" '
+      all(.[].addr_info[]? | select(.scope == "global"); .local == $a and .prefixlen == $p)' >/dev/null ||
+        { reason='kernel IPv4 differs from bearer; wait for netifd'; return 1; }
+    printf '%s' "$routes" | jq -e --arg g "$gateway" --argjson m "$metric" '
+      all(.[]; .gateway == $g and (.metric // 0) == $m and (.type // "unicast") == "unicast")' >/dev/null ||
+        { reason='different default route on modem; repair skipped'; return 1; }
+    link_ok=0; addr_ok=0; route_ok=0
+    printf '%s' "$link" | jq -e 'length == 1 and (.[0].flags | index("UP") != null)' >/dev/null && link_ok=1
+    printf '%s' "$addrs" | jq -e --arg a "$address" --argjson p "$prefix" '
+      any(.[].addr_info[]?; .local == $a and .prefixlen == $p)' >/dev/null && addr_ok=1
+    printf '%s' "$routes" | jq -e 'length > 0 and all(.[]; ((.flags // []) | index("linkdown")) == null)' >/dev/null && route_ok=1
+    reason="kernel link=$link_ok address=$addr_ok default_route=$route_ok ($dev)"
+    return 0
+}
+
+bearer_identity() {
+    modem=$(mmcli --modem=qcom-soc --timeout=10 --output-json 2>/dev/null) || return 1
+    bearer=$(printf '%s' "$modem" | jq -er '
+      select(.modem.generic.state == "connected") | .modem.generic.bearers |
+      select(length == 1) | .[0] |
+      select(test("^/org/freedesktop/ModemManager1/Bearer/[0-9]+$"))') || return 1
+    data=$(mmcli --bearer="$bearer" --timeout=10 --output-json 2>/dev/null) || return 1
+    printf '%s' "$data" | jq -ceS --arg b "$bearer" --argjson s "$session" '
+      .bearer | select(.status.connected == "yes" and .status.suspended == "no") |
+      select(.status.interface == $s.dev) | ."ipv4-config" |
+      select(.method == "static" and .address == $s.address and
+             (.prefix | tonumber) == $s.prefix and .gateway == $s.gateway) |
+      {bearer: $b, session: $s}'
+}
+
+take_lock() {
+    if ! mkdir "$lock" 2>/dev/null; then
+        oldpid=$(cat "$lock/pid" 2>/dev/null || true)
+        case "$oldpid" in ''|*[!0-9]*) return 1 ;; esac
+        kill -0 "$oldpid" 2>/dev/null && return 1
+        rm -f "$lock/pid"
+        rmdir "$lock" 2>/dev/null || return 1
+        mkdir "$lock" 2>/dev/null || return 1
+    fi
+    echo $$ > "$lock/pid"
+    trap 'rm -f "$lock/pid"; rmdir "$lock" 2>/dev/null || true' EXIT
+    trap 'exit 1' INT TERM HUP
+}
+
+budget() {
+    now=$(cut -d. -f1 /proc/uptime)
+    start=$now; count=0; last=0
+    if [ -f "$state" ]; then
+        read -r start count last < "$state" || return 1
+        case "$start:$count:$last" in *[!0-9:]*) return 1 ;; esac
+    fi
+    if [ "$now" -lt "$start" ] || [ $((now - start)) -ge 600 ]; then
+        start=$now; count=0; last=0
+    fi
+    [ "$count" -lt 3 ] && { [ "$count" -eq 0 ] || [ $((now - last)) -ge 60 ]; } || return 1
+    # Account before the first write, including a failed attempt.
+    printf '%s %s %s\n' "$start" "$((count + 1))" "$now" > "$state"
+}
+
+repair() {
+    [ "$(cfg ufi-lte-health.main.enabled)" = 1 ] || { say 'recovery disabled'; return 1; }
+    take_lock || { say 'recovery already running'; return 1; }
+    eligible && kernel_state || { say "$reason"; return 1; }
+    [ "$link_ok$addr_ok$route_ok" != 111 ] || { say "$reason; no repair needed"; return 0; }
+    first=$(bearer_identity) || { say 'no matching connected static bearer; no changes'; return 1; }
+    # Re-read both sources immediately before mutation (protect against reattach).
+    eligible || { say "$reason"; return 1; }
+    second=$(bearer_identity) || { say 'bearer changed; no changes'; return 1; }
+    [ "$first" = "$second" ] || { say 'session changed; no changes'; return 1; }
+    kernel_state || { say "$reason"; return 1; }
+    budget || { say 'recovery cooldown (at most 3 attempts in 10 minutes)'; return 1; }
+    logger -t ufi-lte-health "Recovering $dev: link=$link_ok address=$addr_ok route=$route_ok"
+    ip link set dev "$dev" up || { say 'link-up failed'; return 1; }
+    if [ "$addr_ok" -eq 0 ]; then
+        ip -4 address add "$address/$prefix" dev "$dev" || { say 'address restore failed'; return 1; }
+    fi
+    ip -4 route replace default via "$gateway" dev "$dev" onlink src "$address" metric "$metric" table 254 ||
+        { say 'default route restore failed'; return 1; }
+    kernel_state || { say "$reason"; return 1; }
+    [ "$link_ok$addr_ok$route_ok" = 111 ] || { say "$reason"; return 1; }
+    logger -t ufi-lte-health "Kernel IPv4 restored on $dev; Internet/proxy still need an end-to-end check"
+    say 'kernel IPv4 restored; this is not an Internet/proxy test'
+}
+
+case "${1:-status}" in
+    status)
+        eligible && kernel_state || { say "$reason"; exit 1; }
+        say "$reason; Internet/proxy not tested"
+        [ "$link_ok$addr_ok$route_ok" = 111 ]
+        ;;
+    repair) repair ;;
+    watch)
+        sleep 60
+        while :; do
+            "$0" repair >/dev/null 2>&1 || true
+            sleep 30
+        done
+        ;;
+    *) say 'usage: ufi-lte-health [status|repair|watch]'; exit 2 ;;
+esac

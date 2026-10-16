@@ -245,6 +245,9 @@ class StockTests(unittest.TestCase):
             self.assertIsNone(z.testzip())
             self.assertIn('UFI001C-USB/INSTALL.cmd',z.namelist())
             self.assertIn('UFI001C-USB/RESTORE.cmd',z.namelist())
+            self.assertIn('UFI001C-USB/edl_watchdog.py',z.namelist())
+            self.assertIn('UFI001C-USB/chunk_backup.py',z.namelist())
+            self.assertIn('UFI001C-USB/RESUME.cmd',z.namelist())
             for name,data in original.items():self.assertEqual(z.read('UFI001C-USB/'+name),data)
             self.assertFalse(any('emmc.bin' in name or 'modemst1.bin' in name for name in z.namelist()))
         self.assertEqual(output.with_suffix('.zip.sha256').read_text().split()[0],s.update.sha(output))
@@ -286,6 +289,63 @@ class StockTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             s.bind_device(lambda *args:None,dump,stock,self.p,check_gpt=False)
 
+    def test_resume_identity_checks_both_gpts_and_unit_nv(self):
+        dump=stock_fixture(self.p/'stock.bin',self.profile)
+        def edl(action,start,count,path):
+            self.assertEqual(action,'rs')
+            with dump.open('rb') as src:
+                src.seek(start*512); Path(path).write_bytes(src.read(count*512))
+        identity=s.backup_identity(edl,self.profile,self.p)
+        self.assertEqual([r['name'] for r in identity['regions']],
+                         ['primary-gpt','secondary-gpt','modemst1','modemst2'])
+        with dump.open('r+b') as f:
+            f.seek(self.profile['disk_bytes']-512); f.write(b'BROKEN')
+        with self.assertRaisesRegex(ValueError,'secondary GPT'):
+            s.backup_identity(edl,self.profile,self.p)
+
+    def test_resume_cannot_enter_install_after_writes_started(self):
+        state=self.p/'backup-state.json'; state.write_text('{}')
+        s.save_json(self.p/'install.json',{'status':'writing','current_write':'rootfs'})
+        args=argparse.Namespace(firmware=self.p, resume=state, backups=self.p)
+        with patch.object(s,'EDL') as edl:
+            with self.assertRaisesRegex(ValueError,'writing may have started'): s.install(args)
+            edl.assert_not_called()
+
+    def test_incomplete_backup_never_reaches_device_writes(self):
+        # Exercise install orchestration at the exact interrupted-backup boundary.
+        args=argparse.Namespace(firmware=self.p, backups=self.p/'backups', edl_root=self.p, resume=None)
+        with patch.object(s,'firmware_files',return_value=self.p), \
+             patch.object(s.update,'prepare_images',return_value=[]), \
+             patch.object(s,'EDL') as edl, \
+             patch.object(s,'preview_profile',return_value=self.profile), \
+             patch.object(s,'full_backup',side_effect=OSError('USB disconnected')), \
+             patch.object(s,'execute_plan') as write, \
+             patch.object(s,'confirm') as confirm, \
+             patch('builtins.input',return_value=''), \
+             patch.object(s.shutil,'disk_usage',return_value=shutil._ntuple_diskusage(30*s.GIB,0,30*s.GIB)):
+            with self.assertRaises(OSError): s.install(args)
+            write.assert_not_called(); confirm.assert_not_called()
+            self.assertEqual([c.args[0] for c in edl.return_value.call_args_list], ['rs'])
+
+    def test_resume_reuses_original_images_without_growing_prepared_copies(self):
+        state=self.p/'backup-state.json'; state.write_text('{}')
+        (self.p/'images').mkdir(); (self.p/'prepared').mkdir()
+        (self.p/'prepared'/'old-expansion').write_bytes(b'generated')
+        partial=self.p/'emmc.partial'; partial.write_bytes(b'backup data retained')
+        args=argparse.Namespace(firmware=None, backups=self.p, edl_root=self.p, resume=state)
+        with patch.object(s,'firmware_files',return_value=self.p) as images, \
+             patch.object(s.update,'prepare_images',return_value=[]), \
+             patch.object(s,'EDL'),patch.object(s,'select_path') as picker, \
+             patch.object(s,'preview_profile',return_value=self.profile), \
+             patch.object(s,'full_backup',side_effect=OSError('USB disconnected')), \
+             patch('builtins.input',return_value=''), \
+             patch.object(s.shutil,'disk_usage',return_value=shutil._ntuple_diskusage(30*s.GIB,0,30*s.GIB)):
+            with self.assertRaises(OSError): s.install(args)
+            picker.assert_not_called()
+            images.assert_called_once_with(self.p/'images',self.p/'images-check')
+        self.assertEqual(partial.read_bytes(),b'backup data retained')
+        self.assertFalse((self.p/'prepared'/'old-expansion').exists())
+
     def test_restore_checks_full_hash_and_readback(self):
         # Restore orchestration with a compact synthetic disk; full-size GPT
         # validation and physical anchors are exercised by the other tests.
@@ -297,7 +357,7 @@ class StockTests(unittest.TestCase):
         writes=[]
         def edl(action,*args):
             if action=='wf':writes.append(Path(args[0]).read_bytes())
-            elif action=='rf':Path(args[0]).write_bytes(data)
+            elif action=='rs':Path(args[2]).write_bytes(data[args[0]*512:(args[0]+args[1])*512])
             else:self.fail(action)
         with patch.object(s,'check_stock',return_value=({}, {'test':'abc'})), \
              patch.object(s,'EDL',return_value=edl),patch.object(s,'bind_device'), \

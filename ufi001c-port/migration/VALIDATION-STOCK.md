@@ -1,4 +1,4 @@
-# UFI001C stock installer 3.1.3-rc1 — validation boundaries
+# UFI001C stock installer 3.1.4-rc2 — validation boundaries
 
 This is a first-stock-hardware-test candidate, not a claim that the stock
 conversion has already booted on a second unit. The user confirmed that v2
@@ -49,3 +49,20 @@ New tests cover exact profile selection, unknown/moved layouts, 4GB write
 bounds, secondary GPT placement and probe read-only scope. The read-only probe
 never reads NV, never writes the device, and is not a full backup.
 The full installer still validates actual full-dump size and both GPT copies.
+
+October 15 revision: supervise the existing EDL subprocess, without changing
+its loader, USB driver, command arguments or write plan. Read commands abort
+on a reported USBError/USB Overflow/LIBUSB_ERROR, or after 180 seconds with
+no increase in the output file size. Output is drained through a bounded
+4-MiB-per-command log; failures also produce a small edl-failure.json.
+Writes keep the previous total deadline and never receive the read-idle rule;
+no automatic reconnect, reset or retry is introduced. USB errors at a zero
+process exit are still errors, so validation cannot advance on false success.
+
+Real fake-EDL subprocess tests cover a stalled partial file, no initial data,
+progress resetting the deadline, a USB error flood, split error text, zero
+exit with USB errors, errors after the log cap, large-output pipe draining,
+write timeout separation, nonzero exits and stopping the install flow before
+backup verification/confirmation/writes on read failure. These are host tests,
+not a physical Windows USB/driver or eMMC validation. A successful full backup
+on the user's new modem remains required before conversion.

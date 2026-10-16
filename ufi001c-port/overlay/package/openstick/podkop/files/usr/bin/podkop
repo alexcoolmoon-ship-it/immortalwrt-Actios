@@ -169,15 +169,9 @@ stop_main() {
         nft delete table inet "$NFT_TABLE_NAME"
     fi
 
-    log "Flush ip rule"
-    if ip rule list | grep -q "podkop"; then
-        ip rule del fwmark "$NFT_FAKEIP_MARK"/"$NFT_FAKEIP_MARK" table "$RT_TABLE_NAME" priority 105
-    fi
-
-    log "Flush ip route"
-    if ip route list table "$RT_TABLE_NAME" > /dev/null 2>&1; then
-        ip route flush table "$RT_TABLE_NAME"
-    fi
+    log "Remove owned IPv4 policy rule and local route"
+    sh "$PODKOP_LIB/ufi_policy_routing.sh" remove ||
+        log "Could not remove owned policy routes safely; routing tables were not flushed" "warn"
 
     log "Stop sing-box"
     /etc/init.d/sing-box stop
@@ -2020,6 +2014,14 @@ check_dns_available() {
     local bootstrap_dns_status=0
     local dhcp_config_status=1
     local domain="google.com"
+    local lte_status=-1 lte_detail=""
+    if [ -x /usr/sbin/ufi-lte-health ]; then
+        if lte_detail=$(/usr/sbin/ufi-lte-health status 2>&1); then
+            lte_status=1
+        else
+            lte_status=0
+        fi
+    fi
 
     # Mask NextDNS ID if present
     local display_dns_server="$dns_server"
@@ -2079,7 +2081,14 @@ check_dns_available() {
     config_foreach check_dhcp_has_podkop_dns dnsmasq
     config_load "$PODKOP_CONFIG"
 
-    echo "{\"dns_type\":\"$dns_type\",\"dns_server\":\"$display_dns_server\",\"dns_status\":$dns_status,\"dns_on_router\":$dns_on_router,\"bootstrap_dns_server\":\"$bootstrap_dns_server\",\"bootstrap_dns_status\":$bootstrap_dns_status,\"dhcp_config_status\":$dhcp_config_status}" | jq .
+    jq -n --arg dns_type "$dns_type" --arg dns_server "$display_dns_server" \
+        --arg bootstrap_dns_server "$bootstrap_dns_server" --arg lte_detail "$lte_detail" \
+        --argjson dns_status "$dns_status" --argjson dns_on_router "$dns_on_router" \
+        --argjson bootstrap_dns_status "$bootstrap_dns_status" --argjson dhcp_config_status "$dhcp_config_status" \
+        --argjson lte_status "$lte_status" \
+        '{dns_type:$dns_type,dns_server:$dns_server,dns_status:$dns_status,dns_on_router:$dns_on_router,
+          bootstrap_dns_server:$bootstrap_dns_server,bootstrap_dns_status:$bootstrap_dns_status,
+          dhcp_config_status:$dhcp_config_status,lte_status:$lte_status,lte_detail:$lte_detail}'
 }
 
 check_dhcp_has_podkop_dns() {

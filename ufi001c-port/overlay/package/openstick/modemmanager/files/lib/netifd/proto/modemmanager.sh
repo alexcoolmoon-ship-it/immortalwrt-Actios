@@ -129,11 +129,50 @@ modemmanager_disconnected_method_ppp_ipv4() {
 	proto_kill_command "$interface"
 }
 
+# netifd's protocol state is not evidence that the kernel device is UP.
+# In particular bam-dmux can recreate a DOWN device after a remoteproc crash.
+modemmanager_prepare_link() {
+	local interface="$1" wwan="$2" mtu="$3"
+	[ -n "$wwan" ] || {
+		proto_notify_error "$interface" DEVICE_MISSING
+		return 1
+	}
+	if [ -n "$mtu" ]; then
+		ip link set dev "$wwan" mtu "$mtu" || {
+			proto_notify_error "$interface" MTU_FAILED
+			return 1
+		}
+	fi
+	ip link set dev "$wwan" up || {
+		proto_notify_error "$interface" LINK_UP_FAILED
+		return 1
+	}
+}
+
+modemmanager_apply_band_profile() {
+	local interface="$1" device="$2" bands="$3" mode="$4" preferred="$5"
+	[ -n "$bands" ] || return 0
+	# MM 1.24 permits mode/band selection from state DISABLED. Apply before
+	# enabling/registration, not after the RF firmware has already scanned.
+	if [ -n "$mode" ]; then
+		if [ -n "$preferred" ]; then
+			modemmanager_set_preferred_mode "$device" "$interface" "$mode" "$preferred" || return 1
+		else
+			modemmanager_set_allowed_mode "$device" "$interface" "$mode" || return 1
+		fi
+	fi
+	mmcli --modem="$device" --timeout 30 --set-current-bands="$bands" || {
+		proto_notify_error "$interface" MM_BAND_PROFILE_FAILED
+		return 1
+	}
+}
+
 modemmanager_connected_method_dhcp_ipv4() {
 	local interface="$1"
 	local wwan="$2"
 	local metric="$3"
 
+	modemmanager_prepare_link "$interface" "$wwan" "" || return 1
 	proto_init_update "${wwan}" 1
 	proto_set_keep 1
 	proto_send_update "${interface}"
@@ -163,16 +202,16 @@ modemmanager_connected_method_static_ipv4() {
 
 	[ -n "${address}" ] || {
 		proto_notify_error "${interface}" ADDRESS_MISSING
-		return
+		return 1
 	}
 
 	[ -n "${prefix}" ] || {
 		proto_notify_error "${interface}" PREFIX_MISSING
-		return
+		return 1
 	}
 	mask=$(cdr2mask "${prefix}")
 
-	[ -n "${mtu}" ] && /sbin/ip link set dev "${wwan}" mtu "${mtu}"
+	modemmanager_prepare_link "$interface" "$wwan" "$mtu" || return 1
 
 	proto_init_update "${wwan}" 1
 	proto_set_keep 1
@@ -199,6 +238,7 @@ modemmanager_connected_method_dhcp_ipv6() {
 	local wwan="$2"
 	local metric="$3"
 
+	modemmanager_prepare_link "$interface" "$wwan" "" || return 1
 	proto_init_update "${wwan}" 1
 	proto_set_keep 1
 	proto_send_update "${interface}"
@@ -228,15 +268,15 @@ modemmanager_connected_method_static_ipv6() {
 
 	[ -n "${address}" ] || {
 		proto_notify_error "${interface}" ADDRESS_MISSING
-		return
+		return 1
 	}
 
 	[ -n "${prefix}" ] || {
 		proto_notify_error "${interface}" PREFIX_MISSING
-		return
+		return 1
 	}
 
-	[ -n "${mtu}" ] && /sbin/ip link set dev "${wwan}" mtu "${mtu}"
+	modemmanager_prepare_link "$interface" "$wwan" "$mtu" || return 1
 
 	proto_init_update "${wwan}" 1
 	proto_set_keep 1
@@ -273,6 +313,7 @@ proto_modemmanager_init_config() {
 	proto_config_add_string username
 	proto_config_add_string password
 	proto_config_add_string allowedmode
+	proto_config_add_string allowedbands
 	proto_config_add_string preferredmode
 	proto_config_add_string pincode
 	proto_config_add_string iptype
@@ -577,7 +618,7 @@ proto_modemmanager_setup() {
 	local modempath modemstatus bearercount bearerpath connectargs bearerstatus beareriface
 	local bearermethod_ipv4 bearermethod_ipv6 auth cliauth
 	local operatorname operatorid registration accesstech signalquality
-	local allowedmode preferredmode
+	local allowedmode preferredmode allowedbands
 
 	local device apn allowedauth username password pincode
 	local iptype plmn metric signalrate allow_roaming
@@ -591,7 +632,7 @@ proto_modemmanager_setup() {
 
 	json_get_vars device apn allowedauth username password
 	json_get_vars pincode iptype sourcefilter plmn metric signalrate allow_roaming
-	json_get_vars allowedmode preferredmode force_connection
+	json_get_vars allowedmode preferredmode allowedbands force_connection
 
 	json_get_vars init_epsbearer
 	json_get_vars init_iptype init_allowedauth
@@ -621,6 +662,8 @@ proto_modemmanager_setup() {
 
 	# always cleanup before attempting a new connection, just in case
 	modemmanager_cleanup_connection "${modemstatus}"
+
+	modemmanager_apply_band_profile "$interface" "$device" "$allowedbands" "$allowedmode" "$preferredmode" || return 1
 
 	mmcli --modem="${device}" --timeout 120 --enable || {
 		proto_notify_error "${interface}" MM_MODEM_DISABLED
@@ -668,8 +711,10 @@ proto_modemmanager_setup() {
 		[ "$?" -ne "0" ] && return 1
 	}
 
-	if [ -z "${allowedmode}" ]; then
-		modemmanager_set_allowed_mode "$device" "$interface" "any"
+	if [ -n "$allowedbands" ]; then
+		: # The persistent profile has already been applied before enabling.
+	elif [ -z "${allowedmode}" ]; then
+		modemmanager_set_allowed_mode "$device" "$interface" "any" || return 1
 	else
 		case "$allowedmode" in
 			"2g")
@@ -818,7 +863,7 @@ proto_modemmanager_setup() {
 		echo "IPv4 connection setup required in interface ${interface}: ${bearermethod_ipv4}"
 		case "${bearermethod_ipv4}" in
 		"dhcp")
-			modemmanager_connected_method_dhcp_ipv4 "${interface}" "${beareriface}" "${metric}"
+			modemmanager_connected_method_dhcp_ipv4 "${interface}" "${beareriface}" "${metric}" || return 1
 			;;
 		"static")
 			address=$(modemmanager_get_field "${bearerstatus}" "bearer.ipv4-config.address")
@@ -827,10 +872,10 @@ proto_modemmanager_setup() {
 			mtu=$(modemmanager_get_field "${bearerstatus}" "bearer.ipv4-config.mtu")
 			dns1=$(modemmanager_get_field "${bearerstatus}" "bearer.ipv4-config.dns.value\[1\]")
 			dns2=$(modemmanager_get_field "${bearerstatus}" "bearer.ipv4-config.dns.value\[2\]")
-			modemmanager_connected_method_static_ipv4 "${interface}" "${beareriface}" "${address}" "${prefix}" "${gateway}" "${mtu}" "${dns1}" "${dns2}" "${metric}"
+			modemmanager_connected_method_static_ipv4 "${interface}" "${beareriface}" "${address}" "${prefix}" "${gateway}" "${mtu}" "${dns1}" "${dns2}" "${metric}" || return 1
 			;;
 		"ppp")
-			modemmanager_connected_method_ppp_ipv4 "${interface}" "${beareriface}" "${username}" "${password}" "${allowedauth}"
+			modemmanager_connected_method_ppp_ipv4 "${interface}" "${beareriface}" "${username}" "${password}" "${allowedauth}" || return 1
 			;;
 		*)
 			proto_notify_error "${interface}" UNKNOWN_METHOD
@@ -845,7 +890,7 @@ proto_modemmanager_setup() {
 		echo "IPv6 connection setup required in interface ${interface}: ${bearermethod_ipv6}"
 		case "${bearermethod_ipv6}" in
 		"dhcp")
-			modemmanager_connected_method_dhcp_ipv6 "${interface}" "${beareriface}" "${metric}"
+			modemmanager_connected_method_dhcp_ipv6 "${interface}" "${beareriface}" "${metric}" || return 1
 			;;
 		"static")
 			address=$(modemmanager_get_field "${bearerstatus}" "bearer.ipv6-config.address")
@@ -854,7 +899,7 @@ proto_modemmanager_setup() {
 			mtu=$(modemmanager_get_field "${bearerstatus}" "bearer.ipv6-config.mtu")
 			dns1=$(modemmanager_get_field "${bearerstatus}" "bearer.ipv6-config.dns.value\[1\]")
 			dns2=$(modemmanager_get_field "${bearerstatus}" "bearer.ipv6-config.dns.value\[2\]")
-			modemmanager_connected_method_static_ipv6 "${interface}" "${beareriface}" "${address}" "${prefix}" "${gateway}" "${mtu}" "${dns1}" "${dns2}" "${metric}"
+			modemmanager_connected_method_static_ipv6 "${interface}" "${beareriface}" "${address}" "${prefix}" "${gateway}" "${mtu}" "${dns1}" "${dns2}" "${metric}" || return 1
 			;;
 		"ppp")
 			proto_notify_error "${interface}" "unsupported method"

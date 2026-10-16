@@ -26,7 +26,7 @@ class ReleaseTests(unittest.TestCase):
         fixtures(self.images)
         firmware_metadata(self.images)
         self.report = {
-            'status': 'passed', 'profile': 'UFI001C v3.1.4 Services / OpenWrt 25.12.5',
+            'status': 'passed', 'profile': 'UFI001C v3.1.5 LTE Recovery / OpenWrt 25.12.5',
             'files_sha256': {dest: hashlib.sha256(package_release.source_bytes(source)).hexdigest()
                              for dest, source in package_release.FILES.items()}}
         self.save_report()

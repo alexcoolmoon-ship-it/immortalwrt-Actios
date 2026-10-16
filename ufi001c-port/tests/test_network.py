@@ -69,6 +69,12 @@ elif a[1:3] == ['route', 'replace']:
 elif a[1:3] == ['rule', 'add']:
     if mode == 'rule_error': rc = 2
     elif mode != 'silent_rule': s['rule'] = True
+elif a[1:3] == ['rule', 'del']:
+    assert a == ['-4','rule','del','fwmark','0x100000/0x100000','table','105','priority','105']
+    s['rule'] = False
+elif a[1:3] == ['route', 'del']:
+    assert a == ['-4','route','del','local','0.0.0.0/0','dev','lo','table','105']
+    s['route'] = False
 elif a == ['-4', 'route', 'show', 'table', '105']:
     if s['route']: print('local default dev lo scope host')
 elif a[:3] == ['-4', 'route', 'get']:
@@ -112,6 +118,24 @@ sys.exit(rc)
                 (self.tmp / 'state.json').unlink(missing_ok=True)
                 p = self.run_routing(script, mode)
                 self.assertNotEqual(p.returncode, 0, p.stdout)
+
+    def test_stop_deletes_only_owned_rule_and_route_never_flushes(self):
+        script = self.routing_fixture()
+        self.assertEqual(self.run_routing(script).returncode, 0)
+        for _ in range(2):
+            p = subprocess.run(['sh', str(script), 'remove'], env=self.env, capture_output=True, text=True)
+            self.assertEqual(p.returncode, 0, p.stderr)
+        state = json.loads((self.tmp / 'state.json').read_text())
+        deletes = [a for a in state['calls'] if 'del' in a]
+        self.assertEqual(len(deletes), 2)
+        self.assertFalse(any('flush' in a or '254' in a for a in state['calls']))
+        self.assertFalse(state['route']); self.assertFalse(state['rule'])
+
+    def test_stop_rejects_old_kernel_before_route_deletion(self):
+        script = self.routing_fixture(('FIB_RULES',))
+        p = subprocess.run(['sh', str(script), 'remove'], env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertFalse((self.tmp / 'state.json').exists())
 
     def test_build_gate_requires_all_actual_kernel_flags(self):
         config = self.tmp / 'build_dir/target-aarch64/linux-msm89xx_msm8916/linux-6.12.94/.config'

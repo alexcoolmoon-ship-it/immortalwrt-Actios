@@ -1,0 +1,2 @@
+config recovery 'main'
+	option enabled '1'

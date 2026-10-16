@@ -43,5 +43,15 @@ case "${1:-check}" in
         check_routes
         ;;
     check) check_routes ;;
-    *) fail "usage: sh ufi_policy_routing.sh [ensure|check]" ;;
+    remove)
+        # Old kernels may alias tables to main. Never flush a named table.
+        kernel_ready
+        if has_rule; then
+            ip -4 rule del fwmark 0x100000/0x100000 table 105 priority 105 || fail "cannot remove owned rule."
+        fi
+        if ip -4 route show table 105 2>/dev/null | grep -Eq '^local (default|0\.0\.0\.0/0) dev lo( |$)'; then
+            ip -4 route del local 0.0.0.0/0 dev lo table 105 || fail "cannot remove owned local route."
+        fi
+        ;;
+    *) fail "usage: sh ufi_policy_routing.sh [ensure|check|remove]" ;;
 esac

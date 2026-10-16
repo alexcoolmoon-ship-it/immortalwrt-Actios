@@ -24,6 +24,7 @@ required = [
     "PACKAGE_gc",
     "PACKAGE_ufi001c-defaults",
     "PACKAGE_ufi-care",
+    "PACKAGE_ufi-lte-health",
     "PACKAGE_podkop",
     "PACKAGE_ufi-service-proxy",
     "PACKAGE_luci-app-podkop",

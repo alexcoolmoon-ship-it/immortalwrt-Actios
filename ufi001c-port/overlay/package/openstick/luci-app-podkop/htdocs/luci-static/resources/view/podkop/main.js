@@ -2574,16 +2574,21 @@ async function runDnsCheck() {
     throw new Error("DNS checks failed");
   }
   const data = dnsChecks.data;
-  const allGood = Boolean(data.dns_on_router) && Boolean(data.dhcp_config_status) && Boolean(data.bootstrap_dns_status) && Boolean(data.dns_status);
+  const allGood = data.lte_status !== 0 && Boolean(data.dns_on_router) && Boolean(data.dhcp_config_status) && Boolean(data.bootstrap_dns_status) && Boolean(data.dns_status);
   const atLeastOneGood = Boolean(data.dns_on_router) || Boolean(data.dhcp_config_status) || Boolean(data.bootstrap_dns_status) || Boolean(data.dns_status);
   const { state, description } = getMeta({ atLeastOneGood, allGood });
   updateCheckStore({
     order,
     code,
     title,
-    description,
+    description: data.lte_status === 0 ? "Сначала восстановите LTE: интерфейс, адрес или маршрут недоступны" : description,
     state,
     items: [
+      ...insertIf(data.lte_status === 0 || data.lte_status === 1, [{
+        state: data.lte_status === 1 ? "success" : "error",
+        key: "LTE: интерфейс, IPv4 и маршрут",
+        value: data.lte_detail || ""
+      }]),
       ...insertIf(
         data.dns_type === "doh" || data.dns_type === "dot" || !data.bootstrap_dns_status,
         [

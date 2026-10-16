@@ -7,6 +7,12 @@ import sys
 
 PORT = Path(__file__).resolve().parent
 FILES = {
+    'lib/netifd/proto/modemmanager.sh': 'overlay/package/openstick/modemmanager/files/lib/netifd/proto/modemmanager.sh',
+    'usr/sbin/ufi-lte-health': 'overlay/package/openstick/ufi-lte-health/files/ufi-lte-health',
+    'usr/share/ufi-lte-health/session.jq': 'overlay/package/openstick/ufi-lte-health/files/session.jq',
+    'etc/init.d/ufi-lte-health': 'overlay/package/openstick/ufi-lte-health/files/init',
+    'etc/config/ufi-lte-health': 'overlay/package/openstick/ufi-lte-health/files/config',
+    'etc/uci-defaults/99-ufi001c': 'overlay/package/openstick/ufi001c-defaults/files/99-ufi001c',
     'etc/init.d/hotplug-gcreboot': 'overlay/package/openstick/gc/files/hotplug-gcreboot.init',
     'etc/hotplug.d/gcrestart/restart_gc.sh': 'overlay/package/openstick/gc/files/restart_gc.sh',
     'etc/config/gc': 'overlay/package/openstick/gc/files/gc.uci',

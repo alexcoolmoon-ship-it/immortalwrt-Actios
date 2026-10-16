@@ -19,7 +19,6 @@ import struct
 import subprocess
 import sys
 import tempfile
-import time
 import uuid
 import zipfile
 import zlib
@@ -30,8 +29,10 @@ _spec = importlib.util.spec_from_file_location('ufi_update', HERE / 'ufi-install
 update = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(update)
 from radio_backup import read_at, read_gpt, copy_and_hash
+from edl_watchdog import run_edl, EDLError
+from chunk_backup import full_backup, read_range, exclusive
 
-VERSION = '3.1.4-rc1'
+VERSION = '3.1.5-rc1'
 SECTOR = 512
 GIB = 1024**3
 NV = ('modemst1', 'modemst2', 'fsg', 'fsc', 'sec')
@@ -44,7 +45,7 @@ LIMITS = {'boot.img': 64*1024**2, 'system.img': GIB,
           'routing-rootfs-check.json': 65536, 'kernel-routing-check.txt': 16384,
           'validation.json': 65536, 'release-info.json': 16384,
           'INSTALL-RU.md': 65536, 'VALIDATION-v3.1.2.md': 65536,
-          'VALIDATION-v3.1.3.md': 65536, 'VALIDATION-v3.1.4.md': 65536}
+          'VALIDATION-v3.1.3.md': 65536, 'VALIDATION-v3.1.4.md': 65536, 'VALIDATION-v3.1.5.md': 65536}
 
 
 def digest_bytes(data):
@@ -356,31 +357,7 @@ class EDL:
         # Every mutation therefore MUST be followed by an independent readback.
         command = [str(self.exe), '-u', str(self.root / 'edl.py'), action,
                    *map(str, args), '--memory=emmc', '--sectorsize=512']
-        with self.log.open('ab') as log:
-            log.write(('\nEDL: ' + action + '\n').encode()); log.flush()
-            with subprocess.Popen(command, cwd=self.root, stdout=log, stderr=subprocess.STDOUT) as proc:
-                started = time.monotonic()
-                try:
-                    while True:
-                        try:
-                            code = proc.wait(timeout=30)
-                            if code: raise subprocess.CalledProcessError(code, command)
-                            break
-                        except subprocess.TimeoutExpired:
-                            elapsed = int(time.monotonic()-started)
-                            suffix = ''
-                            if action in ('rf', 'rs') and Path(args[-1]).exists():
-                                suffix = f', считано {Path(args[-1]).stat().st_size//1048576} МБ'
-                            print(f'  EDL {action}: {elapsed//60} мин {elapsed%60} с{suffix}; журнал: {self.log}', flush=True)
-                            if action in ('rf', 'rs') and elapsed >= 180 and (not Path(args[-1]).exists() or Path(args[-1]).stat().st_size == 0):
-                                raise ValueError('За 3 минуты чтение не началось. Проверьте EDL/9008, драйвер и edl.log.')
-                            if elapsed > 45*60:
-                                raise ValueError('EDL timeout; inspect edl.log and keep the backup')
-                except BaseException:
-                    proc.terminate()
-                    try: proc.wait(timeout=10)
-                    except subprocess.TimeoutExpired: proc.kill(); proc.wait()
-                    raise
+        run_edl(command, self.root, action, args, self.log)
 
 
 def bind_device(edl, dump, stock, work, check_gpt=True):
@@ -401,6 +378,32 @@ def bind_device(edl, dump, stock, work, check_gpt=True):
                 raise ValueError('Device GPT changed since backup')
 
 
+def backup_identity(edl, profile, work):
+    """Read both GPTs and non-empty unit-specific NV before every resume."""
+    size = profile['disk_bytes']
+    regions = []
+    def read_region(name, start, count):
+        path = Path(work) / ('identity-' + name + '.bin')
+        path.unlink(missing_ok=True)
+        edl('rs', start, count, path)
+        if not path.is_file() or path.stat().st_size != count*SECTOR:
+            raise ValueError('Incomplete identity read: ' + name)
+        data = path.read_bytes()
+        regions.append({'name':name, 'offset':start*SECTOR, 'bytes':len(data), 'sha256':digest_bytes(data)})
+        return data
+    primary = read_region('primary-gpt', 0, 34)
+    secondary = read_region('secondary-gpt', size//SECTOR-33, 33)
+    parts = validate_gpt(GPTView(size, primary, secondary), size)
+    if [[p['name'],p['first_lba'],p['last_lba']] for p in parts.values()] != profile['geometry']:
+        raise ValueError('Connected GPT does not match the selected stock profile')
+    for name in ANCHORS:
+        part = parts[name]
+        data = read_region(name, part['first_lba'], part['size_bytes']//SECTOR)
+        if data == bytes(len(data)) or data == b'\xff'*len(data):
+            raise ValueError('Empty device identity partition: ' + name)
+    return {'regions':regions}
+
+
 def execute_plan(edl, writes, journal_path, work):
     journal = json.loads(Path(journal_path).read_text(encoding='utf-8'))
     journal['status'] = 'writing'; journal['verified_writes'] = []
@@ -415,7 +418,7 @@ def execute_plan(edl, writes, journal_path, work):
         readback = Path(work) / 'readback.bin'
         # Do not allow a failed reader to leave a previous successful file behind.
         if readback.exists(): readback.unlink()
-        edl('rs', item['first_lba'], item['sectors'], readback)
+        read_range(edl, item['first_lba'], item['sectors'], readback)
         if readback.stat().st_size != item['sectors']*SECTOR or update.sha(readback) != item['sha256']:
             raise ValueError('READBACK MISMATCH: '+item['name']+'; keep EDL mode, use RESTORE.cmd')
         journal['verified_writes'].append(item['name']); save_json(journal_path, journal)
@@ -429,8 +432,10 @@ def select_path(title, initial, mode='zip'):
         import tkinter as tk
         from tkinter import filedialog
         root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True)
+        types = {'zip':[('ZIP прошивки','*.zip')], 'resume':[('Состояние чтения','backup-state.json')],
+                 'backup':[('Резервная копия','emmc.bin')]}
         result = filedialog.askopenfilename(title=title, initialdir=str(initial),
-                    filetypes=[('ZIP прошивки', '*.zip')] if mode == 'zip' else [('Резервная копия', 'emmc.bin')])
+                    filetypes=types.get(mode, types['backup']))
         root.destroy()
         if not result: raise ValueError('Выбор отменён')
         return Path(result)
@@ -453,17 +458,50 @@ def confirm(text, word):
 
 
 def install(args):
+    with contextlib.ExitStack() as locks:
+        return install_locked(args, locks)
+
+
+def install_locked(args, locks):
     base = HERE / 'stock-base'; check_base(base)
-    source = args.firmware or (HERE if (HERE/'boot.img').is_file() and (HERE/'system.img').is_file()
-                              else select_path('Выберите ZIP успешной сборки UFI001C v3 XHTTP', Path.home()/'Downloads'))
-    run = new_run(args.backups)
+    source = args.firmware
+    resume_state = getattr(args, 'resume', None)
+    if resume_state:
+        resume_state = Path(resume_state).resolve(strict=True)
+        if resume_state.name != 'backup-state.json':
+            raise ValueError('Select backup-state.json produced by this resumable installer')
+        run = resume_state.parent
+        locks.enter_context(exclusive(run, 'install.lock'))
+        if (run/'install.json').is_file():
+            previous = json.loads((run/'install.json').read_text(encoding='utf-8'))
+            if previous.get('status') != 'backup-verified' or previous.get('current_write') or previous.get('verified_writes'):
+                raise ValueError('Device writing may have started; use RESTORE.cmd, not backup resume')
+    else:
+        run = new_run(args.backups)
+        locks.enter_context(exclusive(run, 'install.lock'))
+        source = source or (HERE if (HERE/'boot.img').is_file() and (HERE/'system.img').is_file()
+                            else select_path('Выберите ZIP успешной сборки UFI001C v3 XHTTP', Path.home()/'Downloads'))
     print('Резервная копия и журнал: ' + str(run), flush=True)
     # A full backup plus rootfs preparation/readback needs substantially more
     # space than the compressed firmware ZIP.
     if shutil.disk_usage(run).free < 3*GIB:
         raise ValueError('Нужно не менее 3 ГБ для подготовки образов; место под бэкап проверяется после чтения GPT')
-    images = firmware_files(source, run / 'images')
-    work = run / 'prepared'; work.mkdir()
+    work = run / 'prepared'
+    if resume_state:
+        # Revalidate the original image pair; do not accumulate another 1 GiB
+        # expansion on each retry. Only generated staging dirs are recreated,
+        # never backup data. The journal guard above has excluded all writes.
+        source = run / 'images'
+        if not source.is_dir() or source.is_symlink():
+            raise ValueError('Original firmware images for this backup are missing')
+        for staging in (run/'images-check', work):
+            if staging.is_symlink(): raise ValueError('Unexpected staging symlink')
+            if staging.exists(): shutil.rmtree(staging)
+        image_out = run / 'images-check'
+    else:
+        image_out = run / 'images'
+    images = firmware_files(source, image_out)
+    work.mkdir()
     prepared = update.prepare_images(images, work)
     edl = EDL(args.edl_root, run / 'edl.log')
     print('Оставьте подключённым только один модем. Выключите его, зажмите кнопку,\n'
@@ -473,11 +511,21 @@ def install(args):
     edl('rs', 0, 34, preview)
     profile = preview_profile(preview, base)
     print(f"Найден профиль: {profile['id']}, {profile['disk_bytes']} байт. Проверка радио ещё впереди.", flush=True)
-    if shutil.disk_usage(run).free < profile['disk_bytes'] + 4*GIB:
+    existing_bytes = min((run/'emmc.partial').stat().st_size, profile['disk_bytes']) if (run/'emmc.partial').is_file() else 0
+    if (run/'emmc.bin').is_file(): existing_bytes = min((run/'emmc.bin').stat().st_size, profile['disk_bytes'])
+    needed = profile['disk_bytes'] - existing_bytes + 4*GIB
+    if shutil.disk_usage(run).free < needed:
         raise ValueError(f"Нужно ещё не менее {(profile['disk_bytes']+4*GIB+GIB-1)//GIB} ГиБ свободного места под бэкап и проверку")
-    dump = run / 'emmc.bin'
-    print('Чтение всей заводской памяти. Может занять 10–20 минут. Журнал: edl.log', flush=True)
-    edl('rf', dump)
+    print('Чтение всей заводской памяти блоками по 32 МБ. Журнал: edl.log\n'
+          'При USB-обрыве сохранённые проверенные блоки можно продолжить через RESUME.cmd.', flush=True)
+    try:
+        dump = full_backup(edl, run, profile, lambda: backup_identity(edl, profile, work))
+    except (ValueError, OSError, subprocess.CalledProcessError):
+        print('Резервное копирование прервано. Запись на модем НЕ НАЧИНАЛАСЬ.\n'
+              'emmc.partial — НЕ готовый бэкап. Сохраните всю папку. Для продолжения\n'
+              'переподключите ЭТОТ ЖЕ модем в EDL, запустите RESUME.cmd и выберите\n'
+              'backup-state.json из этой папки. Другой модем будет отклонён.', flush=True)
+        raise
     with dump.open('r+b') as saved:
         saved.flush(); os.fsync(saved.fileno())
     stock, nv_hashes = check_stock(dump, profile)
@@ -509,8 +557,8 @@ def install(args):
         if sys.platform == 'win32': os.startfile(str(run / 'ACCESS.txt'))
 
 
-PACKAGE_FILES = ('stock_install.py', 'ufi-install.py', 'radio_backup.py',
-                 'INSTALL.cmd', 'RESTORE.cmd', 'MAKE-BUNDLE.cmd', 'STOCK-CHECK.cmd',
+PACKAGE_FILES = ('stock_install.py', 'ufi-install.py', 'radio_backup.py', 'edl_watchdog.py', 'chunk_backup.py',
+                 'INSTALL.cmd', 'RESUME.cmd', 'RESTORE.cmd', 'MAKE-BUNDLE.cmd', 'STOCK-CHECK.cmd',
                  'README-STOCK-RU.md', 'VALIDATION-STOCK.md', 'BASE-SOURCES.md')
 
 
@@ -576,7 +624,8 @@ def restore(args):
     print('Восстановление всей памяти. Не отключайте USB.', flush=True)
     edl('wf', dump)
     print('Повторное чтение всей памяти для проверки…', flush=True)
-    readback = work / 'readback.bin'; edl('rf', readback)
+    readback = work / 'readback.bin'
+    read_range(edl, 0, dump.stat().st_size//SECTOR, readback)
     if readback.stat().st_size != dump.stat().st_size or update.sha(readback) != report['backup_sha256']:
         raise ValueError('Full restore readback differs; keep EDL mode, inspect edl.log')
     save_json(recovery, {'status': 'full-readback-verified', 'backup_sha256': report['backup_sha256']})
@@ -620,19 +669,25 @@ def probe(args):
         raise ValueError('Другая радиопрошивка. Пришлите только stock-probe.json; установщик сохраняет запрет записи.')
 
 
+def resume_install(args):
+    args.resume = args.resume or select_path('Выберите backup-state.json прерванного чтения', args.backups, 'resume')
+    return install(args)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['install', 'restore', 'bundle', 'probe'])
+    parser.add_argument('action', choices=['install', 'resume', 'restore', 'bundle', 'probe'])
     parser.add_argument('--version', action='version', version='UFI stock installer '+VERSION)
     parser.add_argument('--edl-root', type=Path, default=Path(os.environ.get('UFI_EDL_ROOT', str(Path.home()/'edl'))))
     parser.add_argument('--backups', type=Path, default=Path.home()/'UFI001C-backups')
     parser.add_argument('--firmware', type=Path)
     parser.add_argument('--backup', type=Path)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--resume', type=Path)
     args = parser.parse_args()
     print('UFI001C: простой переход со стока — '+VERSION, flush=True)
     try:
-        {'install': install, 'restore': restore, 'bundle': bundle, 'probe': probe}[args.action](args)
+        {'install': install, 'resume': resume_install, 'restore': restore, 'bundle': bundle, 'probe': probe}[args.action](args)
     except (OSError, ValueError, EOFError, zipfile.BadZipFile, subprocess.CalledProcessError) as exc:
         print('\nSTOP: '+str(exc)+'\nЕсли запись уже начиналась, сохраните EDL и используйте RESTORE.cmd.\n'
               'Бэкапы находятся в '+str(args.backups)+'. Не удаляйте их.', file=sys.stderr)

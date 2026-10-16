@@ -4,7 +4,7 @@ PKG_NAME:=luci-app-podkop
 
 PKG_VERSION:=0.7.24
 
-PKG_RELEASE:=101
+PKG_RELEASE:=102
 
 LUCI_TITLE:=LuCI podkop app
 LUCI_DEPENDS:=+luci-base +podkop

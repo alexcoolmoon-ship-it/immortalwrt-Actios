@@ -12,14 +12,14 @@ sys.path.insert(0, str(PORT / 'migration'))
 import stock_install
 from check_rootfs import FILES, source_bytes
 
-VERSION = '3.1.4'
+VERSION = '3.1.5'
 
 
 def check_reports(images):
     images = Path(images)
     rootfs = json.loads((images / 'routing-rootfs-check.json').read_text())
-    if rootfs.get('status') != 'passed' or rootfs.get('profile') != 'UFI001C v3.1.4 Services / OpenWrt 25.12.5':
-        raise ValueError('Missing/wrong v3.1.4 rootfs report')
+    if rootfs.get('status') != 'passed' or rootfs.get('profile') != 'UFI001C v3.1.5 LTE Recovery / OpenWrt 25.12.5':
+        raise ValueError('Missing/wrong v3.1.5 rootfs report')
     for installed, source in FILES.items():
         actual = hashlib.sha256(source_bytes(source)).hexdigest()
         if rootfs.get('files_sha256', {}).get(installed) != actual:

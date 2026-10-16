@@ -8,12 +8,12 @@
    Другие файлы репозитория не удаляйте.
 3. Если .github не загрузилась, откройте существующий
    `.github/workflows/openwrt25-ufi001c.yml`, нажмите карандаш и вставьте текст
-   нового файла. Сохраните коммит. Первая строка должна содержать v3.1.4 Services.
-4. Actions → OpenWrt 25.12.5 UFI001C v3.1.4 Services → Run workflow → main.
+   файла openwrt25-ufi001c.yml с верхнего уровня комплекта. Сохраните коммит. Первая строка должна содержать v3.1.5 LTE Recovery.
+4. Actions → OpenWrt 25.12.5 UFI001C v3.1.5 LTE Recovery → Run workflow → main.
    Это новый запуск; Re-run старого задания использует старый код.
-5. После Success: Releases → Assets → UFI001C-OpenWrt-25.12.5-v3.1.4-USB.zip.
+5. После Success: Releases → Assets → UFI001C-OpenWrt-25.12.5-v3.1.5-USB.zip.
    При выключенной публикации тот же ZIP находится в артефакте
-   UFI001C-v3.1.4-USB-Download. GitHub Source code — исходники, не образ.
+   UFI001C-v3.1.5-USB-Download. GitHub Source code — исходники, не образ.
 
 ## Создать отдельный проект
 
@@ -32,7 +32,7 @@
 
 ## Загрузить полные исходники через Git
 
-В source-full.zip около 300 файлов. Для нового репозитория удобнее Git, чтобы
+В source-full.zip полные исходники. Для нового репозитория удобнее Git, чтобы
 не потерять .github при загрузке папок. Создайте пустой репозиторий
 `alexcoolmoon-ship-it/UFI001C-OpenWrt` без автоматического README, распакуйте
 source-full.zip и откройте CMD именно в папке с README.md и ufi001c-port:
@@ -40,7 +40,7 @@ source-full.zip и откройте CMD именно в папке с README.md 
 ```cmd
 git init -b main
 git add README.md README-UPSTREAM.md .github ufi001c-port
-git commit -m "UFI001C OpenWrt v3.1.4 Services"
+git commit -m "UFI001C OpenWrt v3.1.5 LTE Recovery"
 git remote add origin https://github.com/alexcoolmoon-ship-it/UFI001C-OpenWrt.git
 git push -u origin main
 ```
