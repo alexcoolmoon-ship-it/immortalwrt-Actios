@@ -67,6 +67,8 @@ class ReleaseTests(unittest.TestCase):
             self.assertFalse({'emmc.bin','podkop.saved'} & names)
             self.assertIn('UFI001C-USB/runtime/UFI001C-Installer.exe', archive.namelist())
             self.assertIn('UFI001C-USB/runtime/edl/UFI-EDL.exe', archive.namelist())
+            self.assertEqual(archive.read('UFI001C-USB/build.config'),
+                             (PORT/'clean/ufi001c.config').read_bytes())
             info = json.loads(archive.read('UFI001C-USB/release-info.json'))
             self.assertEqual(info['hardware_acceptance'], 'pending')
             self.assertEqual(info['source_commit'], 'a' * 40)

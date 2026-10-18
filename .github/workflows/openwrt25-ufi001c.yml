@@ -170,6 +170,7 @@ jobs:
           export UFI_TEST_ENGINE="qemu-aarch64 -L $UFI_ROOT $UFI_ROOT/usr/bin/sing-box"
           sudo --preserve-env=UFI_TEST_ENGINE python3 -m unittest discover -s ufi001c-port/tests -p 'test_clean*.py' -v
       - name: Collect and inspect images
+        id: images
         run: |
           python3 ufi001c-port/collect.py "$RUNNER_TEMP/openwrt" "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5"
           python3 ufi001c-port/check_xhttp.py "$RUNNER_TEMP/openwrt" --report "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/xhttp-validation.json"
@@ -194,6 +195,7 @@ jobs:
             --commit "$GITHUB_SHA" \
             --windows-runtime "$RUNNER_TEMP/ufi-windows-runtime"
       - name: Save firmware and access details
+        if: ${{ !cancelled() && steps.images.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: UFI001C-OpenWrt-25.12.5-v3.2.1-Clean

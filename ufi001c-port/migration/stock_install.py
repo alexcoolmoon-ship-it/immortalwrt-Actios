@@ -224,10 +224,16 @@ def firmware_files(source, out):
     if not all((out / n).is_file() for n in ('boot.img', 'system.img', 'SHA256SUMS', 'build.config', 'ACCESS.txt')):
         raise ValueError('Choose the complete successful v3 XHTTP firmware ZIP (not source-code ZIP)')
     config = (out / 'build.config').read_text(encoding='utf-8-sig')
-    for setting in ('CONFIG_PACKAGE_ufi001c-radio=y', 'CONFIG_PACKAGE_ufi-care=y',
-                    'CONFIG_PACKAGE_podkop-engine=y'):
-        if setting not in config.splitlines():
-            raise ValueError('This is not the v3 XHTTP build: missing ' + setting)
+    settings = set(config.splitlines())
+    for setting in ('CONFIG_PACKAGE_ufi001c-radio=y', 'CONFIG_PACKAGE_podkop-engine=y'):
+        if setting not in settings:
+            raise ValueError('This is not the v3.2.1 clean XHTTP build: missing ' + setting)
+    # Clean firmware deliberately excludes the old recovery services. Requiring
+    # ufi-care here used to reject the real clean .config at the last ZIP gate.
+    for package in ('sing-box', 'sing-box-tiny', 'podkop-engine-full',
+                    'ufi-care', 'ufi-lte-health', 'ufi-service-proxy', 'zapret-ufi'):
+        if 'CONFIG_PACKAGE_' + package + '=y' in settings:
+            raise ValueError('Unexpected package in clean firmware: ' + package)
     report_path = out / 'xhttp-validation.json'
     if not report_path.is_file():
         raise ValueError('Missing mandatory xhttp-validation.json from the successful v3 build')

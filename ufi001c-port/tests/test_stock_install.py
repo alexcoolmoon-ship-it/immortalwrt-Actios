@@ -24,7 +24,7 @@ BASE = s.HERE/'stock-base'
 
 def firmware_metadata(folder):
     """Synthetic CI proof tied to synthetic images; not a hardware-test claim."""
-    config = b'CONFIG_PACKAGE_ufi001c-radio=y\nCONFIG_PACKAGE_ufi-care=y\nCONFIG_PACKAGE_podkop-engine=y\n'
+    config = (HERE.parent/'clean/ufi001c.config').read_bytes()
     report = {'status': 'passed', 'architecture': 'aarch64',
               'engine_version': '1.13.21-pdk-r12',
               'features': ['transport.xhttp', 'tools.decode-link'],
@@ -320,6 +320,18 @@ class StockTests(unittest.TestCase):
         report_path.unlink()
         with self.assertRaisesRegex(ValueError,'Missing mandatory xhttp-validation.json'):
             s.firmware_files(source,self.p/'missing-rejected')
+
+    def test_clean_firmware_is_accepted_and_legacy_services_are_rejected(self):
+        source=self.p/'clean';source.mkdir();fixtures(source);firmware_metadata(source)
+        clean=(source/'build.config').read_text()
+        extracted=s.firmware_files(source,self.p/'accepted-clean')
+        self.assertEqual((extracted/'build.config').read_text(),clean)
+        for package in ('ufi-care','ufi-lte-health','ufi-service-proxy','zapret-ufi',
+                        'sing-box','sing-box-tiny','podkop-engine-full'):
+            with self.subTest(package=package):
+                (source/'build.config').write_text(clean+'\nCONFIG_PACKAGE_'+package+'=y\n')
+                with self.assertRaisesRegex(ValueError,'Unexpected package in clean firmware'):
+                    s.firmware_files(source,self.p/('rejected-'+package))
 
     def test_wrong_modem_cannot_be_used_for_install_or_restore(self):
         dump=stock_fixture(self.p/'stock.bin',self.profile)
