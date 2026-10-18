@@ -44,8 +44,17 @@ elif name == 'ubus':
     out = json.dumps({'up':True,'pending':False,'available':True,'uptime':40,
       'proto':'modemmanager','device':'wwan0','l3_device':'wwan0','data':{'apn':secret}})
 elif name == 'ip':
-    assert a in [['-4','address','show'],['-4','route','show','table','main']], a
-    out = 'wwan0 inet 192.0.2.5/30' if a[1]=='address' else 'default via 192.0.2.6 dev wwan0'
+    if mode.startswith('clean') and a==['-j','link','show','dev','wwan0']:
+        out=json.dumps([{'flags':['UP','LOWER_UP']}])
+    elif mode.startswith('clean') and a==['-j','-4','address','show','dev','wwan0']:
+        out=json.dumps([{'addr_info':[{'family':'inet','scope':'global','local':'192.0.2.5'}]}])
+    elif mode.startswith('clean') and a==['-4','route','get','77.88.8.8']:
+        out='77.88.8.8 via 192.0.2.6 dev wwan0'
+    elif mode.startswith('clean') and a==['-4','route','get','198.18.0.254','mark','0x100000']:
+        out='local 198.18.0.254 dev lo table podkop mark 0x100000'
+    else:
+        assert a in [['-4','address','show'],['-4','route','show','table','main']], a
+        out = 'wwan0 inet 192.0.2.5/30' if a[1]=='address' else 'default via 192.0.2.6 dev wwan0'
 elif name == 'curl':
     assert '--noproxy' in a and a[a.index('--noproxy')+1]=='', a
     assert a[a.index('--proxy')+1]=='http://127.0.0.1:4534', a
@@ -56,8 +65,15 @@ elif name == 'curl':
     else: out='200'
     Path(a[a.index('-o')+1]).write_text(json.dumps(body))
 elif name == 'dig':
-    assert a==['@127.0.0.1','example.com','A','+time=3','+tries=1','+short'], a
-    out = '' if mode=='dns_fail' else '93.184.215.14'
+    if mode.startswith('clean') and a[:3]==['@77.88.8.8','example.com','A']:
+        assert '+tcp' in a and '+answer' in a
+        out=';; status: SERVFAIL,' if mode=='clean_dns_fail' else ';; status: NOERROR,\nexample.com. 60 IN A 93.184.215.14'
+    elif mode.startswith('clean') and a[1]=='fakeip.podkop.fyi':
+        assert a[0] in ('@127.0.0.42','@127.0.0.1')
+        out='203.0.113.3' if mode=='clean_fakeip_fail' else '198.18.0.1'
+    else:
+        assert a==['@127.0.0.1','example.com','A','+time=3','+tries=1','+short'], a
+        out = '' if mode=='dns_fail' else '93.184.215.14'
 elif name == 'dmesg':
     out = '\n'.join('[ %.3f] rflte_old.c:100 old boot event' % (i/10) for i in range(190))
     if mode=='new_rf': out+='\n[ 110.500] remoteproc remoteproc0: crash detected'
@@ -104,8 +120,27 @@ class PostbootCheck(unittest.TestCase):
     def run_check(self, mode='ok', token='test-run'):
         (self.p/'state.json').write_text(json.dumps({'mode':mode,'target':TARGET,'calls':[]}))
         env=dict(self.env,TEST_MODE=mode,TEST_TOKEN=token)
-        p=subprocess.run(['sh','-c',HARNESS],env=env,capture_output=True,text=True,timeout=20)
+        harness=HARNESS
+        if mode.startswith('clean'):
+            harness=harness.replace('health() { echo \'LTE: kernel link=1 address=1 default_route=1 (wwan0)\'; [ "$TEST_MODE" != health_fail ]; }','')
+            harness=harness.replace('collect "$TEST_TOKEN"','clean_profile() { return 0; }; collect "$TEST_TOKEN"')
+        p=subprocess.run(['sh','-c',harness],env=env,capture_output=True,text=True,timeout=20)
         return p
+
+    def test_clean_profile_checks_real_link_dns_and_fakeip_without_removed_helpers(self):
+        p=self.run_check('clean_ok')
+        self.assertEqual(p.returncode,0,p.stdout+p.stderr)
+        self.assertIn('CURRENT_BOOT_LTE_DNS_FAKEIP_OK',self.summary())
+        self.assertIn('Local FakeIP and marked route: 3/3',self.summary())
+        calls=json.loads((self.p/'state.json').read_text())['calls']
+        self.assertFalse(any(c[0]=='curl' for c in calls))
+        self.assertFalse(any(c[0]=='sing-box' and 'check' in c for c in calls))
+
+    def test_clean_profile_cannot_pass_with_wrong_fakeip_or_upstream_servfail(self):
+        for mode in ('clean_fakeip_fail','clean_dns_fail'):
+            p=self.run_check(mode,mode)
+            self.assertEqual(p.returncode,0,p.stdout+p.stderr)
+            self.assertNotIn('\nCURRENT_BOOT_LTE_DNS_FAKEIP_OK\n',self.summary(mode))
 
     def summary(self, token='test-run'):
         return (self.root/f'run-{token}'/'report'/'SUMMARY.txt').read_text()

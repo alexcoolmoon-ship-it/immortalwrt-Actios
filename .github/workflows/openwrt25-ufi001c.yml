@@ -14,13 +14,45 @@ on:
 permissions:
   contents: read
 
-# Serialize new runs without interrupting a build already in this group.
-# This queues a second run; it does not deduplicate manual dispatches.
+# A corrected source supersedes its unfinished image; compile only the latest.
 concurrency:
   group: ufi001c-firmware
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
+  dns-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Download this port
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install ARM64 emulator and image reader
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user e2fsprogs jq
+      - name: Retrieve previously verified r12 reference images
+        id: reference
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: UFI001C-OpenWrt-25.12.5-v3.2.0-Final-Candidate
+          run-id: 39143998939
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ufi-reference-images
+      - name: Verify and extract the actual reference ARM64 engine
+        if: ${{ steps.reference.outcome == 'success' }}
+        run: python3 ufi001c-port/ci/reference_engine.py "$RUNNER_TEMP/ufi-reference-images" "$RUNNER_TEMP/ufi-reference"
+      - name: Check live DNS, FakeIP, restart and upstream failure
+        if: ${{ steps.reference.outcome == 'success' }}
+        run: |
+          export UFI_TEST_ENGINE="qemu-aarch64 -L $RUNNER_TEMP/ufi-reference/root $RUNNER_TEMP/ufi-reference/root/usr/bin/sing-box"
+          sudo --preserve-env=UFI_TEST_ENGINE python3 -m unittest discover -s ufi001c-port/tests -p 'test_clean*.py' -v
+      - name: Require final live checks when the optional reference has expired
+        if: ${{ steps.reference.outcome != 'success' }}
+        run: echo 'Reference artifact is unavailable; live checks with the newly built engine remain mandatory.'
   windows-tools:
     runs-on: windows-2022
     timeout-minutes: 30
@@ -55,7 +87,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   firmware:
-    needs: windows-tools
+    needs: [windows-tools, dns-preflight]
     permissions:
       contents: write
     runs-on: ubuntu-24.04
@@ -130,13 +162,13 @@ jobs:
           set -o pipefail
           python3 ufi001c-port/check_kernel.py "$RUNNER_TEMP/openwrt" | tee "$RUNNER_TEMP/kernel-routing-check.txt"
           python3 ufi001c-port/check_rootfs.py "$RUNNER_TEMP/openwrt" | tee "$RUNNER_TEMP/routing-rootfs-check.json"
-      - name: Check generated configurations with the built ARM64 engine
+      - name: Check clean DNS and FakeIP with the built ARM64 engine
         run: |
           set -eu
           UFI_ROOT=$(find "$RUNNER_TEMP/openwrt/build_dir" -type d -name root-msm89xx | head -n1)
           test -x "$UFI_ROOT/usr/bin/sing-box"
           export UFI_TEST_ENGINE="qemu-aarch64 -L $UFI_ROOT $UFI_ROOT/usr/bin/sing-box"
-          python3 -m unittest discover -s ufi001c-port/tests -p test_clean.py -v
+          sudo --preserve-env=UFI_TEST_ENGINE python3 -m unittest discover -s ufi001c-port/tests -p 'test_clean*.py' -v
       - name: Collect and inspect images
         run: |
           python3 ufi001c-port/collect.py "$RUNNER_TEMP/openwrt" "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5"

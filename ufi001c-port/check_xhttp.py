@@ -67,7 +67,7 @@ def verify(binary, command, output):
         transport = outbound['transport']
         if (transport.get('uplink_data_placement') != 'header'
                 or transport.get('uplink_data_key') != 'x-edge-data'
-                or transport.get('uplink_chunk_size') != 4000
+                or str(transport.get('uplink_chunk_size')) != '4000'
                 or str(transport.get('xmux', {}).get('max_connections')) != '2'):
             raise ValueError('XHTTP extra/XMUX options lost in decode-link')
         outbound['tag'] = 'probe'

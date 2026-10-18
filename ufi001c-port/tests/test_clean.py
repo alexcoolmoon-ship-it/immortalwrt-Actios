@@ -67,9 +67,11 @@ esac
         return subprocess.run(['bash', '-c', script], capture_output=True, text=True, timeout=90)
 
     def generate(self, **kwargs):
-        p = self.shell('sing_box_save_config() { printf "%s\\n" "$config"; }; sing_box_init_config', **kwargs)
+        output = self.tmp / 'generated.json'
+        p = self.shell('sing_box_save_config() { sing_box_cm_save_config_to_file "$config" '
+                       + shlex.quote(str(output)) + '; }; sing_box_init_config', **kwargs)
         self.assertEqual(p.returncode, 0, p.stderr)
-        return json.loads(p.stdout)
+        return json.loads(output.read_text())
 
     def test_upstream_snapshot_and_declared_dns_patch_match_manifest(self):
         prepare.verify_source()
@@ -101,7 +103,7 @@ esac
         self.assertTrue(data['experimental']['cache_file']['store_fakeip'])
         transport = next(o['transport'] for o in data['outbounds'] if o['type'] == 'vless')
         self.assertEqual(transport['uplink_data_key'], 'x-edge-data')
-        self.assertEqual(transport['uplink_chunk_size'], 4000)
+        self.assertEqual(str(transport['uplink_chunk_size']), '4000')
         self.assertEqual(transport['uplink_data_placement'], 'header')
         if os.environ.get('UFI_TEST_ENGINE'):
             config = self.tmp / 'config.json'
@@ -116,6 +118,63 @@ esac
         self.assertEqual(servers['dns-server']['domain_resolver'], 'bootstrap-dns-server')
         self.assertEqual(servers['bootstrap-dns-server']['type'], 'tcp')
         self.assertNotIn('detour', servers['dns-server'])
+
+    def test_empty_template_does_not_break_a_new_named_proxy(self):
+        p = self.shell('''
+config_set main proxy_string '   '
+config_set main community_lists russia_inside
+config section new_proxy
+option connection_type proxy
+option proxy_config_type url
+option proxy_string 'vless://00000000-0000-4000-8000-000000000001@proxy.example:443?type=xhttp&mode=packet-up'
+sing_box_save_config() { printf '%s\\n' "$config"; }
+sing_box_init_config
+''')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        data = json.loads(p.stdout)
+        tags = {o['tag'] for o in data['outbounds']}
+        self.assertIn('new_proxy-out', tags)
+        self.assertNotIn('main-out', tags)
+        for rule in data['route']['rules']:
+            if 'outbound' in rule:
+                self.assertIn(rule['outbound'], tags)
+
+    def test_filter_keeps_block_and_exclusion_sections(self):
+        p = self.shell('''
+config section deny
+option connection_type block
+config section local
+option connection_type exclusion
+show_name() { echo "$1"; }
+foreach_configured_section show_name
+''')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.stdout.splitlines(), ['main', 'deny', 'local'])
+
+    def test_first_start_configures_dnsmasq_and_subsequent_start_does_not_duplicate_backup(self):
+        # Use the actual shipped UCI defaults and production start/DHCP logic.
+        # Replace service/uci writes with a stateful recorder in this process.
+        config_path = CLEAN / 'package/openstick/podkop/files/etc/config/podkop'
+        functions = FUNCTIONS.replace('/etc/init.d/dnsmasq', 'test_dnsmasq')
+        script = '\n'.join([
+            '. ' + shlex.quote(str(PORT / 'tests/fixtures/openwrt-functions.sh')),
+            functions,
+            'log() { printf "%s\\n" "$1" >&2; }',
+            'SB_DNS_INBOUND_ADDRESS=127.0.0.42',
+            'config_load() { :; }; start_main() { :; }',
+            'uci_get() { case "$3" in server) echo 9.9.9.9;; noresolv) echo 0;; cachesize) echo 150;; esac; }',
+            'uci_set() { printf "SET %s %s %s %s\\n" "$1" "$2" "$3" "$4"; [ "$1" != podkop ] || config_set "$2" "$3" "$4"; }',
+            'uci_add_list() { printf "ADD_LIST %s %s %s %s\\n" "$1" "$2" "$3" "$4"; }',
+            'uci_commit() { :; }; uci_remove() { :; }; uci() { :; }',
+            'test_dnsmasq() { echo DNSMASQ_RESTART; }',
+            '. ' + shlex.quote(str(config_path)),
+            'start; start',
+        ])
+        p = subprocess.run(['bash', '-c', script], capture_output=True, text=True, timeout=10)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.stdout.count('ADD_LIST dhcp @dnsmasq[0] server 127.0.0.42'), 1)
+        self.assertEqual(p.stdout.count('ADD_LIST dhcp @dnsmasq[0] podkop_server 9.9.9.9'), 1)
+        self.assertEqual(p.stdout.count('DNSMASQ_RESTART'), 1)
 
     def test_dns_diagnostics_reject_servfail_and_empty_successful_dig(self):
         for answer in ('ok', 'servfail', 'empty'):

@@ -32,8 +32,8 @@
   },
   "modified_sha256": {
     "podkop/Makefile": "df5233f3da17d5c7f75824e2b02b33b6e528200bf8cb0a41d569b3dad79bb4aa",
-    "podkop/files/etc/config/podkop": "4ead5f8b5a13e0127fbef4d2cfd61b3f63a496f3adffcfabf6bfa6c9405f5535",
-    "podkop/files/usr/bin/podkop": "51da250599abbeaa78e085a7e5e46ed2b1983b050446dace68a10fd1b76d36c2",
+    "podkop/files/etc/config/podkop": "712c04e4daa55179b9d310b6e8d5eecef5932f6677caa15d7b2ac29c6297f3f0",
+    "podkop/files/usr/bin/podkop": "761783886ed321b6836367c4f95428b19e2b6023ea6b633de97d49ac101e936a",
     "podkop/files/usr/lib/sing_box_config_facade.sh": "1a3ce556bfcb6be980292f1af5e322c05ac12236566f9dc3ba01786db2017a01",
     "podkop/files/usr/lib/sing_box_config_manager.sh": "4c0a055a7ce45aa633a4d517288306435352f2676d2e2be263b401750528bded",
     "luci-app-podkop/Makefile": "1f7fbbcbedbbbdbce33b039ad8cdaad6c5b3081b432125fa742c649980ea7a10",

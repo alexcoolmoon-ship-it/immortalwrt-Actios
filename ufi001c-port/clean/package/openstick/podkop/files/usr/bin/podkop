@@ -102,9 +102,42 @@ _check_outbound_section() {
 has_outbound_section() {
     local section_exists=1
 
-    config_foreach _check_outbound_section "section"
+    foreach_configured_section _check_outbound_section
 
     return $section_exists
+}
+
+# The shipped empty template is not an outbound. Ignore it consistently when
+# the owner adds a differently named section instead of editing the template.
+section_configured() {
+    local type kind key value
+    config_get type "$1" connection_type
+    case "$type" in
+    proxy)
+        config_get kind "$1" proxy_config_type
+        case "$kind" in
+        url) key=proxy_string ;;
+        selector) key=selector_proxy_links ;;
+        urltest) key=urltest_proxy_links ;;
+        outbound) key=outbound_json ;;
+        *) return 1 ;;
+        esac ;;
+    vpn) key=interface ;;
+    block|exclusion) return 0 ;;
+    *) return 1 ;;
+    esac
+    config_get value "$1" "$key"
+    [ -n "$(printf '%s' "$value" | tr -d '[:space:]')" ]
+}
+
+configured_section_handler() {
+    local section="$1" callback="$2"
+    section_configured "$section" || return 0
+    "$callback" "$section"
+}
+
+foreach_configured_section() {
+    config_foreach configured_section_handler section "$1"
 }
 
 start_main() {
@@ -114,7 +147,7 @@ start_main() {
 
     migration
 
-    config_foreach process_validate_service "section"
+    foreach_configured_section process_validate_service
 
     br_netfilter_disable
 
@@ -139,7 +172,7 @@ start_main() {
 
     # sing-box
     sing_box_init_config
-    config_foreach add_cron_job "section"
+    foreach_configured_section add_cron_job
     /etc/init.d/sing-box start
 
     log "Nice"
@@ -542,9 +575,9 @@ list_update() {
 
     echolog "📥 Downloading and processing lists..."
 
-    config_foreach import_community_subnet_lists "section"
-    config_foreach import_domains_from_remote_domain_lists "section"
-    config_foreach import_subnets_from_remote_subnet_lists "section"
+    foreach_configured_section import_community_subnet_lists
+    foreach_configured_section import_domains_from_remote_domain_lists
+    foreach_configured_section import_subnets_from_remote_subnet_lists
 
     if [ $? -eq 0 ]; then
         echolog "✅ Lists update completed successfully"
@@ -622,7 +655,7 @@ sing_box_configure_outbounds() {
 
     config=$(sing_box_cm_add_direct_outbound "$config" "$SB_DIRECT_OUTBOUND_TAG")
 
-    config_foreach configure_outbound_handler "section"
+    foreach_configured_section configure_outbound_handler
 }
 
 configure_outbound_handler() {
@@ -873,9 +906,9 @@ sing_box_configure_route() {
         config_list_foreach "settings" "routing_excluded_ips" exclude_source_ip_from_routing_handler "$rule_tag"
     fi
 
-    config_foreach include_source_ips_in_routing_handler "section"
+    foreach_configured_section include_source_ips_in_routing_handler
 
-    config_foreach configure_routing_for_section_lists "section"
+    foreach_configured_section configure_routing_for_section_lists
 }
 
 include_source_ips_in_routing_handler() {
@@ -1267,7 +1300,7 @@ sing_box_additional_inbounds() {
         )
     fi
 
-    config_foreach configure_section_mixed_proxy "section"
+    foreach_configured_section configure_section_mixed_proxy
 }
 
 configure_section_mixed_proxy() {
@@ -1592,7 +1625,7 @@ _determine_first_outbound_section() {
 get_first_outbound_section() {
     local first_section=""
 
-    config_foreach _determine_first_outbound_section "section"
+    foreach_configured_section _determine_first_outbound_section
 
     echo "$first_section"
 }
