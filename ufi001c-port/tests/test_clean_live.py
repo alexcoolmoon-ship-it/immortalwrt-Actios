@@ -124,7 +124,9 @@ class LiveCleanTests(unittest.TestCase):
             self.addCleanup(server.shutdown)
         self.dns_port, self.mixed_port = free_port(), free_port()
         output = self.tmp / 'normalized.json'
-        p = self.fixture.shell('''
+        rulesets = self.tmp / 'rule-sets'
+        rulesets.mkdir()
+        p = self.fixture.shell('TMP_RULESET_FOLDER=' + shlex.quote(str(rulesets)) + '''
 config_set main user_domain_list_type dynamic
 config_set main user_domains proxied.test
 sing_box_save_config() { sing_box_cm_save_config_to_file "$config" ''' + shlex.quote(str(output)) + '''; }
@@ -132,6 +134,9 @@ sing_box_init_config
 ''')
         self.assertEqual(p.returncode, 0, p.stderr)
         config = json.loads(output.read_text())
+        local_sets = [r for r in config['route'].get('rule_set', []) if r.get('type') == 'local']
+        self.assertTrue(local_sets, 'Production generator did not create the local domain rule set: ' + p.stderr)
+        self.assertIn('proxied.test', json.loads(Path(local_sets[0]['path']).read_text())['rules'][0]['domain_suffix'])
         for server in config['dns']['servers']:
             if server['type'] != 'fakeip':
                 server.update(server='127.0.0.1', server_port=self.dns.server_address[1])
