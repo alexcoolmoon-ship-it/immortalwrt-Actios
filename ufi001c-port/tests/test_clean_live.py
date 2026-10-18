@@ -94,7 +94,7 @@ class ProxyHandler(socketserver.BaseRequestHandler):
             receive(self.request, 2)
             self.server.targets.append(target)
             self.request.sendall(b'\5\0\0\1' + socket.inet_aton('127.0.0.1') + b'\0\0')
-            receive(self.request, 1)
+            self.request.recv(4096)
             self.request.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK')
         except (EOFError, TimeoutError, ConnectionError, OSError):
             pass
@@ -134,6 +134,7 @@ sing_box_init_config
 ''')
         self.assertEqual(p.returncode, 0, p.stderr)
         config = json.loads(output.read_text())
+        config['log']['level'] = 'debug'
         local_sets = [r for r in config['route'].get('rule_set', []) if r.get('type') == 'local']
         self.assertTrue(local_sets, 'Production generator did not create the local domain rule set: ' + p.stderr)
         self.assertIn('proxied.test', json.loads(Path(local_sets[0]['path']).read_text())['rules'][0]['domain_suffix'])
@@ -199,8 +200,12 @@ sing_box_init_config
                 receive(sock, 18)
             # No domain is provided by the client: the engine must recover it
             # from its FakeIP mapping, including after a process restart.
-            sock.sendall(('GET / HTTP/1.1\r\nHost: ' + address + '\r\n\r\n').encode())
-            self.assertIn(b'200 OK', sock.recv(4096))
+            sock.sendall(b'UFI_PROBE\r\n\r\n')
+            try:
+                self.assertIn(b'200 OK', sock.recv(4096))
+            except (TimeoutError, OSError) as error:
+                self.fail(str(error) + '; proxy targets=' + repr(self.proxy.targets)
+                          + '; engine log=' + Path(self.log.name).read_text()[-6000:])
         self.assertEqual(self.proxy.targets[-1], 'proxied.test')
 
     def test_fakeip_reverse_mapping_survives_engine_restart(self):
