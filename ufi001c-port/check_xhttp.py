@@ -82,6 +82,14 @@ def verify(binary, command, output):
         run('check', '-c', str(config_file))
         probes.append('DNS over HTTPS')
 
+        config_file.write_text(json.dumps({
+            'dns': {'servers': [{'type': 'tcp', 'tag': 'bootstrap-dns-server',
+                                 'server': '77.88.8.8', 'server_port': 53}],
+                    'final': 'bootstrap-dns-server'},
+            'outbounds': [{'type': 'direct', 'tag': 'direct'}]}))
+        run('check', '-c', str(config_file))
+        probes.append('TCP bootstrap DNS')
+
     report = {'status': 'passed', 'architecture': 'aarch64',
               'engine_version': lock['expected_version'],
               'engine_sha256': hashlib.sha256(elf).hexdigest(),

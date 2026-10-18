@@ -1,11 +1,19 @@
 # Only use fresh, complete, unambiguous netifd IPv4 data. Never invent a gateway.
+# OpenWrt's small jq can lack Oniguruma. Do not use test/match/sub here.
+def digits:
+  if type != "string" then false
+  else length > 0 and (explode | all(. >= 48 and . <= 57)) end;
 def ipv4:
-  type == "string" and
-  test("^([0-9]{1,3}\\.){3}[0-9]{1,3}$") and
-  (split(".") | all(tonumber >= 0 and tonumber <= 255));
+  if type != "string" then false else
+    split(".") | length == 4 and
+    all(.[]; if digits and length <= 3 then tonumber <= 255 else false end)
+  end;
+def wwan:
+  if type != "string" then false
+  elif startswith("wwan") then .[4:] | digits else false end;
 select(.up == true and .pending == false and .available == true and
        .autostart == true and .proto == "modemmanager" and (.uptime // 0) >= 20) |
-select(.l3_device | type == "string" and test("^wwan[0-9]+$")) |
+select(.l3_device | wwan) |
 select(."ipv4-address" | length == 1) |
 . as $s | ."ipv4-address"[0] as $a |
 [.route[]? | select(.target == "0.0.0.0" and .mask == 0)] as $routes |

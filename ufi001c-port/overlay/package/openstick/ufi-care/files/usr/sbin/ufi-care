@@ -90,7 +90,7 @@ button() {
     exec 3<"$dev"
     while :; do
         # aarch64 struct input_event: timeval(16), type(2), code(2), value(4).
-        event="$(dd bs=24 count=1 <&3 2>/dev/null | hexdump -v -e '16/1 "%02x" " " 2/2 "%u " " " 1/4 "%u\n"')"
+        event="$(dd bs=24 count=1 <&3 2>/dev/null | hexdump -v -e '16/1 "%02x" 2/2 " %u" 1/4 " %u\n"')"
         [ -n "$event" ] || die 'Button stream ended'
         read -r stamp kind code value <<EOF
 $event
@@ -142,6 +142,12 @@ case "${1:-status}" in
         if verify_snapshot; then echo 'Recovery snapshot: VERIFIED'; else echo 'Recovery snapshot: MISSING/INVALID'; fi
         if ap_up; then echo 'Access point: ENABLED'; else echo 'Access point: not enabled'; fi
         printf 'Button device: '; find_button || true
+        echo 'Input devices:'
+        for p in /sys/class/input/event*/device/name; do
+            [ -f "$p" ] || continue
+            printf '%s: ' "$p"; cat "$p"
+        done
+        ubus -t 3 call service list '{"name":"ufi-care"}' 2>/dev/null || true
         logread -e ufi-care | tail -15 ;;
     *) die 'Usage: ufi-care status|snapshot|recover network|recover settings' ;;
 esac

@@ -1,5 +1,7 @@
 config settings 'settings'
 	option ufi_service_proxy '1'
+	option ufi_bootstrap_transport 'tcp'
+	option ufi_dns_health '1'
         option dns_type 'udp'
         option dns_server '77.88.8.8'
         option bootstrap_dns_server '77.88.8.8'

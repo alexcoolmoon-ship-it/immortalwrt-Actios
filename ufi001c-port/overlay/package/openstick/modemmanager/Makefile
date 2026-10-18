@@ -9,7 +9,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=modemmanager
 PKG_VERSION:=1.24.0
-PKG_RELEASE:=10
+PKG_RELEASE:=11
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://gitlab.freedesktop.org/mobile-broadband/ModemManager.git
@@ -43,6 +43,7 @@ define Package/modemmanager
 	+glib2 \
 	+dbus \
 	+ppp \
+	+jq \
 	+MODEMMANAGER_WITH_MBIM:libmbim \
 	+MODEMMANAGER_WITH_QMI:libqmi \
 	+MODEMMANAGER_WITH_QRTR:libqrtr-glib

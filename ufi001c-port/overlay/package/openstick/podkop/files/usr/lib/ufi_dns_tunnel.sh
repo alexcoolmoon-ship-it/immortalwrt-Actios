@@ -1,5 +1,5 @@
 #!/bin/sh
-# UFI001C / Podkop 0.7.23: DNS via a proxy or proxy-only group, v3.1.3.
+# UFI001C: DNS via a proxy or proxy-only group, v3.2.0.
 # MIT; local backups can contain private proxy credentials (mode 0600).
 set -eu
 umask 077
@@ -15,7 +15,10 @@ filter_config() {
         section=$(sh /usr/lib/podkop/ufi_startup.sh resolve) || die "No configured proxy section for DNS"
     fi
     case "$section" in *[!A-Za-z0-9_]*|'') die "Invalid section name";; esac
-    jq -e --arg tag "$section-out" '
+    bootstrap_transport=$(setting ufi_bootstrap_transport)
+    bootstrap_transport=${bootstrap_transport:-tcp}
+    case "$bootstrap_transport" in tcp|udp) ;; *) die "Invalid bootstrap DNS transport";; esac
+    jq -e --arg tag "$section-out" --arg bootstrap_transport "$bootstrap_transport" '
         def proxy_leaves($cfg; $name; $seen):
             if ($name | type) != "string" or ($seen | index($name)) != null or ($seen | length) >= 16 then
                 error("Invalid or cyclic DNS proxy group")
@@ -46,13 +49,28 @@ filter_config() {
             (.dns.servers[] | select(.tag == "dns-server")) |=
                 (.detour = $tag | del(.domain_resolver, .bind_interface)) |
             (.dns.servers[] | select(.tag == "bootstrap-dns-server")) |=
-                del(.detour, .domain_resolver) |
+                (del(.detour, .domain_resolver) |
+                 if .type == "udp" or .type == "tcp" then .type = $bootstrap_transport else . end) |
             (.outbounds[] | select(.tag as $t | ($leaves | index($t)) != null)).domain_resolver =
                 {server: "bootstrap-dns-server", strategy: "ipv4_only"} |
             if .route.rule_set then
                 .route.rule_set |= map(if .type == "remote" then .download_detour = $tag else . end)
             else . end
         end'
+}
+
+probe_local_dns() {
+    address=${1:-127.0.0.1}
+    case "$address" in 127.0.0.1|127.0.0.42) ;; *) die "Only local DNS probes are supported";; esac
+    name=${2:-example.com}
+    case "$name" in ''|*[!a-z0-9.-]*) die "Invalid DNS probe name";; esac
+    answer=$(dig @"$address" "$name" A +time=4 +tries=1 +noall +comments +answer) || return 1
+    # dig returns zero for SERVFAIL/REFUSED too. A cached/FakeIP answer also
+    # does not prove that the separate external DoH path is working.
+    printf '%s\n' "$answer" | grep -Eq 'status: (NOERROR|NXDOMAIN),' || return 1
+    if [ "$name" = example.com ]; then
+        printf '%s\n' "$answer" | grep -Eq '^example\.com\..*[[:space:]]A[[:space:]]'
+    fi
 }
 
 policy_status() {
@@ -119,7 +137,7 @@ check_status() {
     fi
     if command -v dig >/dev/null 2>&1; then
         echo "Router DNS, example.com:"
-        dig @127.0.0.42 example.com A +time=5 +tries=1 +noall +answer || status=1
+        probe_local_dns 127.0.0.42 || status=1
     fi
     echo 'Local FakeIP checks (public test availability is separate):'
     fakeip_report=$(sh /usr/lib/podkop/ufi_fakeip_check.sh local) || fakeip_report='{}'
@@ -274,6 +292,7 @@ EOF
 case "${1:-install}" in
     filter) filter_config "${2:-}" ;;
     probe-dns) probe_tunnel_dns ;;
+    probe-local) probe_local_dns "${2:-127.0.0.1}" "${3:-example.com}" ;;
     install) install_fix "${2:-@auto}" ;;
     check) check_status ;;
     rollback) [ -r /root/ufi-dns-tunnel-last-backup ] || die "No backup recorded"; restore_backup "$(cat /root/ufi-dns-tunnel-last-backup)" ;;

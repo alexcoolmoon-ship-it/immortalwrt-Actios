@@ -5,6 +5,8 @@ from pathlib import Path
 
 text = Path(sys.argv[1] if len(sys.argv) > 1 else ".config").read_text()
 required = [
+    "DEVEL",
+    "CCACHE",
     "TARGET_msm89xx_msm8916_DEVICE_openstick-ufi001c",
     "TARGET_ROOTFS_EXT4FS",
     "PACKAGE_kmod-wcn36xx",
@@ -44,6 +46,10 @@ required = [
 missing = [name for name in required if f"CONFIG_{name}=y\n" not in text]
 if missing:
     raise SystemExit("Required settings missing: " + ", ".join(missing))
+cache_dir = next((line.partition("=")[2] for line in text.splitlines()
+                  if line.startswith("CONFIG_CCACHE_DIR=")), '""')
+if cache_dir != '""':
+    raise SystemExit("CCACHE_DIR must be empty: CI caches the OpenWrt .ccache directory")
 if "CONFIG_TARGET_ROOTFS_SQUASHFS=y\n" in text:
     raise SystemExit("This first port requires ext4, not squashfs")
 for package in ('sing-box', 'sing-box-tiny', 'podkop-engine-full'):

@@ -7,6 +7,7 @@ import sys
 
 PORT = Path(__file__).resolve().parent
 FILES = {
+    'usr/sbin/ufi-care': 'overlay/package/openstick/ufi-care/files/usr/sbin/ufi-care',
     'lib/netifd/proto/modemmanager.sh': 'overlay/package/openstick/modemmanager/files/lib/netifd/proto/modemmanager.sh',
     'usr/sbin/ufi-lte-health': 'overlay/package/openstick/ufi-lte-health/files/ufi-lte-health',
     'usr/share/ufi-lte-health/session.jq': 'overlay/package/openstick/ufi-lte-health/files/session.jq',
@@ -20,6 +21,9 @@ FILES = {
     'etc/ufi001c-release': 'overlay/files/etc/ufi001c-release',
     'usr/bin/podkop': 'overlay/package/openstick/podkop/files/usr/bin/podkop',
     'usr/lib/podkop/ufi_dns_tunnel.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_dns_tunnel.sh',
+    'usr/lib/podkop/ufi_dns_health.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_dns_health.sh',
+    'etc/init.d/ufi-dns-health': 'overlay/package/openstick/podkop/files/etc/init.d/ufi-dns-health',
+    'etc/init.d/sing-box': 'overlay/package/openstick/podkop-engine/files/sing-box.init',
     'usr/lib/podkop/ufi_policy_routing.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_policy_routing.sh',
     'usr/lib/podkop/ufi_startup.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_startup.sh',
     'usr/lib/podkop/ufi_fakeip_check.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_fakeip_check.sh',

@@ -4,7 +4,7 @@ PKG_NAME:=podkop
 
 PKG_VERSION:=0.7.24
 
-PKG_RELEASE:=102
+PKG_RELEASE:=103
 
 PKG_MAINTAINER:=ITDog <podkop@itdog.info>
 PKG_LICENSE:=GPL-2.0-or-later
@@ -48,6 +48,7 @@ endef
 define Package/podkop/install
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/etc/init.d/podkop $(1)/etc/init.d/podkop
+	$(INSTALL_BIN) ./files/etc/init.d/ufi-dns-health $(1)/etc/init.d/ufi-dns-health
 
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_CONF) ./files/etc/config/podkop $(1)/etc/config/podkop

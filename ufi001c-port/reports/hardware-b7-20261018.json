@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-18",
+  "scope": "Observed UFI001C with UFI001BC 20211121 / HW 10000",
+  "report_sha256": "b2e129435046ac039b0e184ff35ba7e3c55af191a85b62773db5a4b04e187259",
+  "bands_tsv": "test\tresult\tdetail\tregistered_seen\ncontrol-start\tREGISTERED_NO_CRASH\tobserved_only\t1\neutran-1\tREGISTERED_NO_CRASH\tobserved_only\t1\ncontrol-after-eutran-1\tREGISTERED_NO_CRASH\tobserved_only\t1\neutran-3\tREGISTERED_NO_CRASH\tobserved_only\t1\ncontrol-after-eutran-3\tREGISTERED_NO_CRASH\tobserved_only\t1\neutran-5\tNO_REGISTRATION_INCONCLUSIVE\tno_rf_assert_observed\t0\ncontrol-after-eutran-5\tREGISTERED_NO_CRASH\tobserved_only\t1\neutran-7\tREMOTEPROC_CRASH\tcause_unconfirmed\t0\n",
+  "rf_events": "\nTEST eutran-7\n[ 4035.060737] qcom-q6v5-mss 4080000.remoteproc: fatal error received: rflte_dm_tx.c:3124:Assertion TRUE == rflte_dm_tx_pa_device_not_detected failed\n[ 4035.060967] remoteproc remoteproc0: crash detected in 4080000.remoteproc: type fatal error\n[ 4035.073020] remoteproc remoteproc0: handling crash #4 in 4080000.remoteproc\n",
+  "classification": "B7-only RF failure reproduced twice with the same rflte_dm_tx assertion on this device/radio/NV",
+  "unvisited_bands": [],
+  "recovery_after_run": "LTE link/address/default route, proxy DoH, router DNS/FakeIP and service fetches passed",
+  "repeat": {
+    "report_sha256": "dc69e1be6481196f65aac60fba1f78a2a362e55ce757f3c6e767b6f4e1741513",
+    "enable_end_monotonic": 5315.04,
+    "assert_monotonic": 5348.066392,
+    "crash_number": 5,
+    "assert": "rflte_dm_tx.c:3124:Assertion TRUE == rflte_dm_tx_pa_device_not_detected failed"
+  },
+  "remaining_tests": "B8/B38/B39/B40/B41: no registration and no RF assertion observed; not certified for data traffic"
+}

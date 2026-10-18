@@ -14,6 +14,7 @@ sys.path.insert(0, str(PORT))
 import package_release
 from test_migration import fixtures
 from test_stock_install import firmware_metadata
+from test_portable_runtime import make_runtime
 
 
 class ReleaseTests(unittest.TestCase):
@@ -23,10 +24,11 @@ class ReleaseTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.images = self.root / 'images'
         self.images.mkdir()
+        self.runtime = make_runtime(self.root / 'runtime')
         fixtures(self.images)
         firmware_metadata(self.images)
         self.report = {
-            'status': 'passed', 'profile': 'UFI001C v3.1.5 LTE Recovery / OpenWrt 25.12.5',
+            'status': 'passed', 'profile': 'UFI001C v3.2.0 Final Candidate / OpenWrt 25.12.5',
             'files_sha256': {dest: hashlib.sha256(package_release.source_bytes(source)).hexdigest()
                              for dest, source in package_release.FILES.items()}}
         self.save_report()
@@ -54,7 +56,7 @@ class ReleaseTests(unittest.TestCase):
         (self.images / 'INSTALL-RU.md').write_text('test instruction')
         output = self.root / 'release.zip'
         p = subprocess.run([sys.executable, str(PORT / 'package_release.py'), str(self.images),
-                            str(output), '--commit', 'a' * 40], capture_output=True, text=True)
+                            str(output), '--commit', 'a' * 40, '--windows-runtime', str(self.runtime)], capture_output=True, text=True)
         self.assertEqual(p.returncode, 0, p.stderr)
         with zipfile.ZipFile(output) as archive:
             self.assertIsNone(archive.testzip())
@@ -62,6 +64,8 @@ class ReleaseTests(unittest.TestCase):
             self.assertTrue({'INSTALL.cmd','RESTORE.cmd','boot.img','system.img','ACCESS.txt',
                              'routing-rootfs-check.json','release-info.json','INSTALL-RU.md'} <= names)
             self.assertFalse({'emmc.bin','podkop.saved'} & names)
+            self.assertIn('UFI001C-USB/runtime/UFI001C-Installer.exe', archive.namelist())
+            self.assertIn('UFI001C-USB/runtime/edl/UFI-EDL.exe', archive.namelist())
             info = json.loads(archive.read('UFI001C-USB/release-info.json'))
             self.assertEqual(info['hardware_acceptance'], 'pending')
             self.assertEqual(info['source_commit'], 'a' * 40)

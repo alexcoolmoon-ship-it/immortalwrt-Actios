@@ -120,7 +120,7 @@ class StockTests(unittest.TestCase):
         args=argparse.Namespace(backups=self.p/'backups',edl_root=self.p,output=self.p/'report.json')
         with patch.object(s,'HERE',self.p), patch.object(s,'EDL',return_value=edl), patch('builtins.input',return_value=''):
             s.probe(args)
-        self.assertEqual(calls, [(0,34),(self.profile['disk_bytes']//512-33,33),(131072,131072)])
+        self.assertEqual(calls, [(0,34),(self.profile['disk_bytes']//512-33,33),(131072,65536),(196608,65536)])
         report=json.loads(args.output.read_text())
         self.assertTrue(report['stock_modem_hash_matches'])
         self.assertFalse(report['writes_performed'])
@@ -142,6 +142,59 @@ class StockTests(unittest.TestCase):
         second=self.p/'second';second.mkdir()
         _,aa,_=s.target_gpt(BASE/'gpt_both0.bin',self.profile['disk_bytes'],second)
         self.assertNotEqual(old_guid,aa.read_bytes()[568:584])
+
+    def test_offline_report_reads_backup_without_usb_and_excludes_nv(self):
+        dump=stock_fixture(self.p/'emmc.bin',self.profile)
+        # A real factory radio is not replaced or trusted by this fixture.
+        with dump.open('r+b') as f:
+            f.seek(131072*512);f.write(b'UFI001BC 20211121\0PRIVATE_ACCOUNT_123456789\0')
+        before=dump.stat()
+        args=argparse.Namespace(backup=dump,backups=self.p)
+        with patch.object(s,'EDL') as usb:
+            report=s.check_backup(args)
+            usb.assert_not_called()
+        self.assertEqual(report['firmware_labels'], ['UFI001BC 20211121'])
+        self.assertFalse(report['stock_modem_hash_matches'])
+        self.assertFalse(report['writes_performed'])
+        self.assertNotIn('nv_sha256', report)
+        self.assertNotIn('PRIVATE_ACCOUNT',json.dumps(report))
+        self.assertEqual((before.st_size,before.st_mtime_ns),
+                         (dump.stat().st_size,dump.stat().st_mtime_ns))
+        archive=next((self.p/'compatibility-reports').glob('*/ufi-stock-radio.zip'))
+        with zipfile.ZipFile(archive) as z:
+            self.assertEqual(set(z.namelist()), {'modem.img','stock-probe.json'})
+            self.assertEqual(z.getinfo('modem.img').file_size,64*1024**2)
+            self.assertEqual(hashlib.sha256(z.read('modem.img')).hexdigest(),report['stock_modem_sha256'])
+
+    def test_partial_or_corrupt_backup_report_never_calls_usb(self):
+        dump=stock_fixture(self.p/'emmc.partial',self.profile)
+        args=argparse.Namespace(backup=dump,backups=self.p)
+        with patch.object(s,'EDL') as usb:
+            with self.assertRaisesRegex(ValueError,'partial'):s.check_backup(args)
+            dump.rename(self.p/'emmc.bin');args.backup=self.p/'emmc.bin'
+            with args.backup.open('r+b') as f:f.seek(-512+16,2);f.write(bytes(4))
+            with self.assertRaisesRegex(ValueError,'CRC'):s.check_backup(args)
+            usb.assert_not_called()
+
+    def test_radio_mismatch_stops_install_before_full_backup_or_any_write(self):
+        dump=stock_fixture(self.p/'device.bin',self.profile)
+        calls=[]
+        def edl(action,start,count,path):
+            self.assertEqual(action,'rs');calls.append((start,count))
+            with dump.open('rb') as src:
+                src.seek(start*512);Path(path).write_bytes(src.read(count*512))
+        args=argparse.Namespace(firmware=self.p,backups=self.p/'backups',edl_root=self.p,resume=None)
+        with patch.object(s,'firmware_files',return_value=self.p), \
+             patch.object(s.update,'prepare_images',return_value=[]), \
+             patch.object(s,'EDL',return_value=edl), \
+             patch.object(s,'full_backup') as backup, patch.object(s,'execute_plan') as write, \
+             patch('builtins.input',return_value=''), \
+             patch.object(s.shutil,'disk_usage',return_value=shutil._ntuple_diskusage(30*s.GIB,0,30*s.GIB)):
+            with self.assertRaisesRegex(ValueError,'SHA256'):s.install(args)
+            backup.assert_not_called();write.assert_not_called()
+        self.assertEqual(len(calls),4)
+        report=json.loads(next(args.backups.glob('*/stock-probe.json')).read_text())
+        self.assertFalse(report['stock_modem_hash_matches'])
 
     def test_stock_profile_wrong_radio_and_bad_backup_gpt_are_rejected(self):
         dump=stock_fixture(self.p/'stock.bin',self.profile)
@@ -318,6 +371,7 @@ class StockTests(unittest.TestCase):
              patch.object(s.update,'prepare_images',return_value=[]), \
              patch.object(s,'EDL') as edl, \
              patch.object(s,'preview_profile',return_value=self.profile), \
+             patch.object(s,'radio_preflight'), \
              patch.object(s,'full_backup',side_effect=OSError('USB disconnected')), \
              patch.object(s,'execute_plan') as write, \
              patch.object(s,'confirm') as confirm, \
@@ -337,6 +391,7 @@ class StockTests(unittest.TestCase):
              patch.object(s.update,'prepare_images',return_value=[]), \
              patch.object(s,'EDL'),patch.object(s,'select_path') as picker, \
              patch.object(s,'preview_profile',return_value=self.profile), \
+             patch.object(s,'radio_preflight'), \
              patch.object(s,'full_backup',side_effect=OSError('USB disconnected')), \
              patch('builtins.input',return_value=''), \
              patch.object(s.shutil,'disk_usage',return_value=shutil._ntuple_diskusage(30*s.GIB,0,30*s.GIB)):

@@ -1,6 +1,9 @@
-name: OpenWrt 25.12.5 UFI001C v3.1.5 LTE Recovery (USB installer rc1)
+name: OpenWrt 25.12.5 UFI001C v3.2.0 Final Candidate / Portable USB
 
 on:
+  push:
+    branches: [codex/ufi001c-final-v3.2.0]
+    paths: ["ufi001c-port/**", ".github/workflows/openwrt25-ufi001c.yml"]
   workflow_dispatch:
     inputs:
       publish_release:
@@ -11,25 +14,53 @@ on:
 permissions:
   contents: read
 
+# Serialize new runs without interrupting a build already in this group.
+# This queues a second run; it does not deduplicate manual dispatches.
+concurrency:
+  group: ufi001c-firmware
+  cancel-in-progress: false
+
 jobs:
-  windows-backup-tests:
+  windows-tools:
     runs-on: windows-2022
-    timeout-minutes: 10
+    timeout-minutes: 30
     env:
       PYTHONUTF8: '1'
     steps:
       - name: Download this port
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Select Python for the portable Windows tools
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
       - name: Check resumable reads and native Windows file locking
         run: python -m unittest discover -s ufi001c-port/tests -p test_chunk_backup.py -v
+      - name: Check portable runtime guards
+        run: python -m unittest discover -s ufi001c-port/tests -p test_portable_runtime.py -v
+      - name: Install locked build tools
+        run: python -m pip install --require-hashes -r ufi001c-port/ci/windows-build-requirements.txt
+      - name: Build and smoke-test offline Windows executables
+        run: >-
+          python ufi001c-port/ci/build_windows.py
+          --work "$env:RUNNER_TEMP/ufi-windows-build"
+          --output "$env:RUNNER_TEMP/USB тест/runtime"
+          --commit "$env:GITHUB_SHA"
+      - name: Save verified Windows runtime
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ufi001c-windows-runtime-v3.2.0
+          path: ${{ runner.temp }}/USB тест/runtime/
+          if-no-files-found: error
+          retention-days: 14
   firmware:
-    needs: windows-backup-tests
+    needs: windows-tools
     permissions:
       contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     env:
       CCACHE_MAXSIZE: 1500M
+      CCACHE_DIR: ${{ runner.temp }}/openwrt/.ccache
     steps:
       - name: Download this port
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -54,30 +85,43 @@ jobs:
           make defconfig 2>&1 | tee config-check.log
           if grep -q 'recursive dependency detected' config-check.log; then exit 1; fi
           python3 "$GITHUB_WORKSPACE/ufi001c-port/check_config.py" .config
-      - name: Restore downloads and compiler cache
+      - name: Restore source downloads
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          path: |
-            ${{ runner.temp }}/openwrt/dl
-            ${{ runner.temp }}/openwrt/.ccache
-          key: ufi-v3-${{ runner.os }}-${{ hashFiles('ufi001c-port/sources.lock.json', 'ufi001c-port/addons.lock.json') }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/openwrt/dl
+          key: ufi-dl-v4-ubuntu24-${{ runner.arch }}-${{ hashFiles('ufi001c-port/sources.lock.json', 'ufi001c-port/addons.lock.json', 'ufi001c-port/feeds.conf', 'ufi001c-port/overlay/**/Makefile', 'ufi001c-port/overlay/ufi001c.config', 'ufi001c-port/feed-overrides/**') }}
           restore-keys: |
-            ufi-v3-${{ runner.os }}-${{ hashFiles('ufi001c-port/sources.lock.json', 'ufi001c-port/addons.lock.json') }}-
+            ufi-dl-v4-ubuntu24-${{ runner.arch }}-
+      - name: Restore compiler cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/openwrt/.ccache
+          # Cache entries are immutable. Change the key with build inputs, not
+          # run_id, so repeated builds reuse one entry while source edits can
+          # save updated results. The fallback stays on the locked toolchain.
+          key: ufi-ccache-v4-ubuntu24-${{ runner.arch }}-${{ hashFiles('ufi001c-port/sources.lock.json', 'ufi001c-port/feeds.conf') }}-${{ hashFiles('ufi001c-port/addons.lock.json', 'ufi001c-port/overlay/**', 'ufi001c-port/feed-overrides/**', 'ufi001c-port/board-drivers.patch') }}
+          restore-keys: |
+            ufi-ccache-v4-ubuntu24-${{ runner.arch }}-${{ hashFiles('ufi001c-port/sources.lock.json', 'ufi001c-port/feeds.conf') }}-
       - name: Download sources
-        working-directory: ${{ runner.temp }}/openwrt
         run: |
-          set -o pipefail
-          make -j8 download 2>&1 | tee download.log
-          # The aggregate download target can ignore individual failures.
-          # Check the four corrected OpenStick recipes explicitly.
-          for package in gc libusbgx qrtr rmtfs; do
-            make "package/openstick/$package/download" V=s 2>&1 | tee -a download.log
-          done
+          python3 ufi001c-port/ci/download_sources.py "$RUNNER_TEMP/openwrt" --jobs 8
       - name: Compile firmware
         working-directory: ${{ runner.temp }}/openwrt
         run: |
           set -o pipefail
           make -j"$(nproc)" V=s 2>&1 | tee build.log
+      - name: Report compiler cache statistics
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          if test -x "$RUNNER_TEMP/openwrt/staging_dir/host/bin/ccache"; then
+            "$RUNNER_TEMP/openwrt/staging_dir/host/bin/ccache" --show-stats | tee "$RUNNER_TEMP/ccache-stats.txt"
+            if test -d "$CCACHE_DIR"; then
+              du -sh "$CCACHE_DIR" | tee -a "$RUNNER_TEMP/ccache-stats.txt"
+            fi
+          else
+            echo 'ccache has not been built; see the earlier failed step.' | tee "$RUNNER_TEMP/ccache-stats.txt"
+          fi
       - name: Verify built kernel policy routing
         run: |
           set -o pipefail
@@ -97,42 +141,48 @@ jobs:
           cp ufi001c-port/addons.lock.json "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
           cp ufi001c-port/migration/ufi-install.py ufi001c-port/migration/radio_backup.py "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
           cp ufi001c-port/INSTALL-RU.md "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
-          cp ufi001c-port/VALIDATION-v3.1.5.md "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
+          cp ufi001c-port/VALIDATION-v3.2.0.md "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
           cp "$RUNNER_TEMP/kernel-routing-check.txt" "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
           cp "$RUNNER_TEMP/routing-rootfs-check.json" "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
           python3 ufi001c-port/migration/package_stock.py "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5"
+      - name: Retrieve the Windows runtime from this exact run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ufi001c-windows-runtime-v3.2.0
+          path: ${{ runner.temp }}/ufi-windows-runtime
       - name: Package the single USB installation ZIP
         run: |
           mkdir -p "$RUNNER_TEMP/ufi-release"
           python3 ufi001c-port/package_release.py \
             "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5" \
-            "$RUNNER_TEMP/ufi-release/UFI001C-OpenWrt-25.12.5-v3.1.5-USB.zip" \
-            --commit "$GITHUB_SHA"
+            "$RUNNER_TEMP/ufi-release/UFI001C-OpenWrt-25.12.5-v3.2.0-USB.zip" \
+            --commit "$GITHUB_SHA" \
+            --windows-runtime "$RUNNER_TEMP/ufi-windows-runtime"
       - name: Save firmware and access details
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: UFI001C-OpenWrt-25.12.5-v3.1.5-LTE-Recovery
+          name: UFI001C-OpenWrt-25.12.5-v3.2.0-Final-Candidate
           path: ${{ runner.temp }}/UFI001C-OpenWrt-25.12.5/
           if-no-files-found: error
           retention-days: 14
       - name: Save single download
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: UFI001C-v3.1.5-USB-Download
+          name: UFI001C-v3.2.0-USB-Download
           path: ${{ runner.temp }}/ufi-release/
           if-no-files-found: error
           retention-days: 14
       - name: Publish checked USB archive
-        if: ${{ inputs.publish_release }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release create "ufi001c-v3.1.5-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}" \
-            "$RUNNER_TEMP/ufi-release/UFI001C-OpenWrt-25.12.5-v3.1.5-USB.zip" \
-            "$RUNNER_TEMP/ufi-release/UFI001C-OpenWrt-25.12.5-v3.1.5-USB.zip.sha256" \
-            --target "$GITHUB_SHA" --title "UFI001C OpenWrt 25.12.5 — v3.1.5 LTE Recovery / USB rc1" \
-            --notes-file ufi001c-port/RELEASE-NOTES-v3.1.5.md --prerelease
+          gh release create "ufi001c-v3.2.0-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}" \
+            "$RUNNER_TEMP/ufi-release/UFI001C-OpenWrt-25.12.5-v3.2.0-USB.zip" \
+            "$RUNNER_TEMP/ufi-release/UFI001C-OpenWrt-25.12.5-v3.2.0-USB.zip.sha256" \
+            --target "$GITHUB_SHA" --title "UFI001C OpenWrt 25.12.5 — v3.2.0 Final Candidate / Portable USB" \
+            --notes-file ufi001c-port/RELEASE-NOTES-v3.2.0.md --prerelease
       - name: Save build log
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -142,6 +192,8 @@ jobs:
             ${{ runner.temp }}/openwrt/build.log
             ${{ runner.temp }}/openwrt/config-check.log
             ${{ runner.temp }}/openwrt/download.log
+            ${{ runner.temp }}/openwrt/download-check.json
+            ${{ runner.temp }}/ccache-stats.txt
             ${{ runner.temp }}/kernel-routing-check.txt
             ${{ runner.temp }}/routing-rootfs-check.json
           if-no-files-found: ignore

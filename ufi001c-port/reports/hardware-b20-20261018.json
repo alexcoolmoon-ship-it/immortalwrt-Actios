@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-18",
+  "scope": {
+    "board": "thwc,ufi001c",
+    "radio_revision": "UFI001BC 20211121",
+    "hardware_revision": "10000",
+    "installed_firmware": "v3.1.5",
+    "scope_limit": "Observed unit and its radio/NV configuration; not evidence of support for another stock revision."
+  },
+  "observed_failure": {
+    "band": "eutran-20",
+    "repeat_count": 2,
+    "assert": "rflte_msm.c:820:Unable to get rx rsb data",
+    "mode_command_end": 2548.24,
+    "band_command_begin": 2548.28,
+    "kernel_assert": 2548.786793,
+    "band_command_end": 2553.01,
+    "classification": "reproducible RF crash while setting B20"
+  },
+  "controls": {
+    "baseline": "eutran-1|eutran-3|eutran-7",
+    "registered_without_new_rf_crash": true,
+    "baseline_restored": true,
+    "doh_via_proxy_after_restore": true,
+    "github_and_openwrt_via_proxy_after_restore": true
+  },
+  "remaining_bands_screened": true,
+  "new_firmware_hardware_test": false,
+  "reports": [
+    {
+      "file": "ufi-report.tar (2).gz",
+      "sha256": "8c9385c60508b36ea90daa87ee5ab917513eb131b002faa869972f02d721a0d2",
+      "run_info": {
+        "version": "1.3",
+        "mode": "bands",
+        "requested_band": "",
+        "boot_id": "1b8428e1-4e87-41fd-8cee-b4a024d1b852",
+        "candidate_window_seconds": 120,
+        "control_window_seconds": 30,
+        "method": "registration-only; no per-band data traffic test"
+      },
+      "bands_tsv": "test\tresult\tdetail\tregistered_seen\ncontrol-start\tREGISTERED_NO_CRASH\tobserved_only\t1\neutran-1\tREGISTERED_NO_CRASH\tobserved_only\t1\ncontrol-after-eutran-1\tREGISTERED_NO_CRASH\tobserved_only\t1\neutran-20\tCOMMAND_FAILED\tno_selection_readback\t0\n"
+    },
+    {
+      "file": "ufi-report.tar (3).gz",
+      "sha256": "3da4d543429f539a3f669110a71e9b719214fece46e260ca7a984985da04bc09",
+      "run_info": {
+        "version": "1.4",
+        "mode": "bands",
+        "requested_band": "eutran-20",
+        "boot_id": "1b8428e1-4e87-41fd-8cee-b4a024d1b852",
+        "candidate_window_seconds": 120,
+        "control_window_seconds": 30,
+        "method": "registration-only; no per-band data traffic test"
+      },
+      "bands_tsv": "test\tresult\tdetail\tregistered_seen\ncontrol-start\tREGISTERED_NO_CRASH\tobserved_only\t1\neutran-20\tRF_CRASH_DURING_SELECTION_SUSPECT\tselection_readback:repeat_required\t0\n"
+    }
+  ],
+  "followup_record": "hardware-band-summary-20261018.json; non-registration remains inconclusive"
+}

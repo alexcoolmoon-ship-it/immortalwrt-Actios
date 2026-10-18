@@ -7,6 +7,7 @@ import copy
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -153,6 +154,32 @@ proto_send_update() { echo "SENT_UPDATE:$*"; }
         self.assertEqual(self.result()['writes'], [])
         self.assertFalse(any(a[0] == 'mmcli' for a in self.result()['calls']))
 
+    def test_openwrt_jq_without_regex_handles_recovery_and_band_policy(self):
+        # The device's small jq throws at test/match/sub. Reproduce that
+        # capability boundary while keeping real JSON operations and shell.
+        real_jq = shutil.which('jq', path=os.environ.get('PATH', ''))
+        self.assertIsNotNone(real_jq)
+        fakebin = self.tmp / 'jq-lite'; fakebin.mkdir()
+        wrapper = fakebin / 'jq'
+        wrapper.write_bytes((PORT / 'tests/fixtures/jq-no-regex.py').read_bytes())
+        wrapper.chmod(0o755)
+        self.env['PATH'] = str(fakebin) + os.pathsep + self.env['PATH']
+        self.env['UFI_TEST_REAL_JQ'] = os.environ.get('UFI_TEST_REAL_JQ', real_jq)
+        p = subprocess.run([str(wrapper), '-n', '"" | test("x")'],
+                           env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('ONIGURUMA', p.stderr)
+        p = self.run_health()
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn('kernel IPv4 restored', p.stdout)
+        self.state = self.result()
+        self.state['modem']['modem']['generic']['supported-bands'] = [
+            'egsm', 'eutran-1', 'eutran-3', 'eutran-7', 'eutran-20']
+        self.save()
+        p = self.run_proto('modemmanager_resolve_lte_bands qcom-soc supported-lte eutran-20')
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertEqual(set(p.stdout.strip().split('|')), {'eutran-1', 'eutran-3', 'eutran-7'})
+
     def test_missing_address_is_restored_only_from_matching_bearer(self):
         self.state['addr'][0]['addr_info'] = []; self.save()
         p = self.run_health()
@@ -231,6 +258,17 @@ proto_send_update() { echo "SENT_UPDATE:$*"; }
         self.assertIn('LINK_UP_FAILED', p.stdout)
         self.assertNotIn('ANNOUNCED_UP', p.stdout)
 
+    def test_invalid_budget_state_stops_without_arithmetic_or_network_writes(self):
+        for text in ('', '\n', '1 2\n', '1 2 3 extra\n', '001 2 3\n',
+                     '1 2 9999999999999999999999\n', '100 1 99\n', '100 1 500\n'):
+            with self.subTest(text=text):
+                (self.tmp/'guard.state').write_text(text)
+                p = self.run_health()
+                self.assertNotEqual(p.returncode, 0)
+                self.assertEqual(p.stderr, '')
+                self.assertEqual(self.result()['writes'], [])
+                self.assertEqual((self.tmp/'guard.state').read_text(), text)
+
     def test_proto_missing_address_is_failure(self):
         p = self.run_proto('modemmanager_connected_method_static_ipv4 modem wwan0 "" 30 10.1.1.1 "" "" "" 0')
         self.assertNotEqual(p.returncode, 0)
@@ -256,6 +294,36 @@ modemmanager_apply_band_profile modem qcom-soc 'eutran-1|eutran-3|eutran-7' 4g '
         p = self.run_proto(cmd)
         self.assertNotEqual(p.returncode, 0)
         self.assertIn('MM_BAND_PROFILE_FAILED', p.stdout)
+
+    def test_lte_exclusions_keep_every_other_supported_band(self):
+        supported = ['egsm', 'utran-1', 'eutran-1', 'eutran-3', 'eutran-5', 'eutran-7',
+                     'eutran-8', 'eutran-20', 'eutran-38', 'eutran-39', 'eutran-40', 'eutran-41']
+        self.state['modem']['modem']['generic']['supported-bands'] = supported; self.save()
+        # B5 is a synthetic exclusion, NOT evidence that B5 is bad on a UFI.
+        p = self.run_proto("modemmanager_resolve_lte_bands qcom-soc supported-lte eutran-5")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(set(p.stdout.strip().split('|')), set(supported[2:]) - {'eutran-5'})
+        self.assertFalse(any(any(x.startswith('--set-') for x in c) for c in self.result()['calls']))
+        for excluded in ('eutran-19', 'eutran-3|', 'any', '|eutran-3'):
+            self.assertNotEqual(self.run_proto(
+                'modemmanager_resolve_lte_bands qcom-soc supported-lte "' + excluded + '"').returncode, 0)
+
+    def test_missing_supported_bands_and_excluding_every_band_fail_closed(self):
+        self.assertNotEqual(self.run_proto('modemmanager_resolve_lte_bands qcom-soc supported-lte ""').returncode, 0)
+        self.state['modem']['modem']['generic']['supported-bands'] = ['eutran-3']; self.save()
+        self.assertNotEqual(self.run_proto('modemmanager_resolve_lte_bands qcom-soc supported-lte eutran-3').returncode, 0)
+        self.assertNotEqual(self.run_proto("modemmanager_resolve_lte_bands qcom-soc 'eutran-1|eutran-3|eutran-7' eutran-3").returncode, 0)
+
+    def test_observed_two_band_policy_does_not_remove_unregistered_bands(self):
+        self.state['modem']['modem']['generic']['supported-bands'] = [
+            'egsm','utran-1','eutran-1','eutran-3','eutran-5','eutran-7','eutran-8',
+            'eutran-20','eutran-38','eutran-39','eutran-40','eutran-41']
+        self.save()
+        p = self.run_proto("modemmanager_resolve_lte_bands qcom-soc supported-lte 'eutran-7|eutran-20'")
+        self.assertEqual(p.returncode, 0, p.stdout+p.stderr)
+        self.assertEqual(set(p.stdout.strip().split('|')), {
+            'eutran-1','eutran-3','eutran-5','eutran-8',
+            'eutran-38','eutran-39','eutran-40','eutran-41'})
 
 
 if __name__ == '__main__':

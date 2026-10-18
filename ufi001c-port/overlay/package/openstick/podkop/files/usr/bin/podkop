@@ -192,9 +192,11 @@ start() {
 
     uci_set "podkop" "settings" "shutdown_correctly" 0
     uci commit "podkop" && config_load "$PODKOP_CONFIG"
+    : >/var/run/ufi-podkop.active
 }
 
 stop() {
+    rm -f /var/run/ufi-podkop.active
     local dont_touch_dhcp
     config_get_bool dont_touch_dhcp "settings" "dont_touch_dhcp" 0
     if [ "$dont_touch_dhcp" -eq 0 ]; then
@@ -780,10 +782,12 @@ sing_box_configure_dns() {
     config=$(sing_box_cm_configure_dns "$config" "$SB_DNS_SERVER_TAG" "ipv4_only" true)
 
     log "Adding DNS Servers" "debug"
-    local dns_type dns_server bootstrap_dns_server dns_domain_resolver dns_server_address
+    local dns_type dns_server bootstrap_dns_server dns_domain_resolver dns_server_address bootstrap_transport
     config_get dns_type "settings" "dns_type" "doh"
     config_get dns_server "settings" "dns_server" "1.1.1.1"
     config_get bootstrap_dns_server "settings" "bootstrap_dns_server" "77.88.8.8"
+    config_get bootstrap_transport "settings" "ufi_bootstrap_transport" "tcp"
+    case "$bootstrap_transport" in tcp|udp) ;; *) log 'Invalid bootstrap DNS transport' fatal; return 1;; esac
 
     dns_server_address="$(url_get_host "$dns_server")"
     if ! is_ipv4 "$dns_server_address"; then
@@ -791,6 +795,8 @@ sing_box_configure_dns() {
     fi
 
     config=$(sing_box_cm_add_udp_dns_server "$config" "$SB_BOOTSTRAP_SERVER_TAG" "$bootstrap_dns_server" 53)
+    config=$(printf '%s' "$config" | jq --arg tag "$SB_BOOTSTRAP_SERVER_TAG" --arg transport "$bootstrap_transport" \
+        '(.dns.servers[] | select(.tag == $tag)).type = $transport')
     config=$(sing_box_cf_add_dns_server "$config" "$dns_type" "$SB_DNS_SERVER_TAG" "$dns_server" "$dns_domain_resolver")
     config=$(sing_box_cm_add_fakeip_dns_server "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_INET4_RANGE")
 
@@ -2002,6 +2008,13 @@ get_status() {
     echo "{\"enabled\":$enabled,\"status\":\"$status\"}"
 }
 
+dns_query_ok() {
+    local answer
+    answer=$(dig "$@" +noall +comments +answer) || return 1
+    printf '%s\n' "$answer" | grep -q 'status: NOERROR,' &&
+    printf '%s\n' "$answer" | grep -Eq '[[:space:]]A[[:space:]]'
+}
+
 check_dns_available() {
     local dns_type dns_server bootstrap_dns_server ufi_dns_proxy_section
     config_get dns_type "settings" "dns_type"
@@ -2051,29 +2064,37 @@ check_dns_available() {
             dns_server="$(echo "$dns_server" | cut -d'/' -f1)"
         fi
 
-        if dig @"$dns_server" "$domain" +https="$doh_path" +timeout=2 +tries=1 > /dev/null 2>&1; then
+        if dns_query_ok @"$dns_server" "$domain" A +https="$doh_path" +timeout=4 +tries=1; then
             dns_status=1
         fi
     elif [ "$dns_type" = "dot" ]; then
-        if dig @"$dns_server" "$domain" +tls +timeout=2 +tries=1 > /dev/null 2>&1; then
+        if dns_query_ok @"$dns_server" "$domain" A +tls +timeout=4 +tries=1; then
             dns_status=1
         fi
     elif [ "$dns_type" = "udp" ]; then
-        if dig @"$dns_server" "$domain" +timeout=2 +tries=1 > /dev/null 2>&1; then
+        if dns_query_ok @"$dns_server" "$domain" A +timeout=4 +tries=1; then
             dns_status=1
         fi
     fi
 
     # Check if local DNS resolver is working
-    if dig @127.0.0.1 "$domain" +timeout=2 +tries=1 > /dev/null 2>&1; then
+    if dns_query_ok @127.0.0.1 "$domain" A +timeout=4 +tries=1; then
         dns_on_router=1
     fi
 
     # Check bootstrap DNS server
     if [ -n "$bootstrap_dns_server" ]; then
-        if dig @"$bootstrap_dns_server" "$domain" +timeout=2 +tries=1 > /dev/null 2>&1; then
+        local bootstrap_transport bootstrap_arg="" active_conf
+        config_get bootstrap_transport settings ufi_bootstrap_transport tcp
+        config_get active_conf settings config_path /etc/sing-box/config.json
+        # Report the active runtime, including an older configuration before reload.
+        bootstrap_transport=$(jq -r '[.dns.servers[]? | select(.tag == "bootstrap-dns-server") | .type][0] // empty' "$active_conf" 2>/dev/null) || true
+        [ -n "$bootstrap_transport" ] || config_get bootstrap_transport settings ufi_bootstrap_transport tcp
+        [ "$bootstrap_transport" != tcp ] || bootstrap_arg=+tcp
+        if dns_query_ok @"$bootstrap_dns_server" "$domain" A $bootstrap_arg +timeout=4 +tries=1; then
             bootstrap_dns_status=1
         fi
+        bootstrap_dns_server="$bootstrap_dns_server ($bootstrap_transport)"
     fi
 
     # Check if /etc/config/dhcp has server 127.0.0.42

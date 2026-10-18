@@ -149,6 +149,34 @@ modemmanager_prepare_link() {
 	}
 }
 
+# Explicit exclusion policy. The current recovery allowlist is not an exclusion
+# list: callers must choose supported-lte before broadening it. Never infer LTE
+# B20/B19 from an undocumented firmware assertion number.
+modemmanager_resolve_lte_bands() {
+	local device="$1" policy="$2" excluded="$3" supported
+	if [ "$policy" != supported-lte ]; then
+		[ -z "$excluded" ] || return 1
+		printf '%s\n' "$policy"
+		return 0
+	fi
+	supported=$(mmcli --modem="$device" --timeout 15 --output-json) || return 1
+	printf '%s' "$supported" | jq -er --arg excluded "$excluded" '
+	  def lte_band:
+	    if type != "string" then false
+	    elif startswith("eutran-") then .[7:] |
+	      length >= 1 and length <= 3 and .[0:1] != "0" and
+	      (explode | all(. >= 48 and . <= 57))
+	    else false end;
+	  .modem.generic["supported-bands"] |
+	  if type != "array" then error("missing supported bands") else . end |
+	  map(select(lte_band)) | unique as $all |
+	  ($excluded | if . == "" then [] else split("|") end) as $deny |
+	  if ($all | length) == 0 or
+	     any($deny[]; (lte_band | not)) or
+	     (($deny - $all) | length) != 0 then error("invalid LTE exclusion") else
+	  ($all - $deny) | if length == 0 then error("no LTE bands remain") else join("|") end end'
+}
+
 modemmanager_apply_band_profile() {
 	local interface="$1" device="$2" bands="$3" mode="$4" preferred="$5"
 	[ -n "$bands" ] || return 0
@@ -314,6 +342,7 @@ proto_modemmanager_init_config() {
 	proto_config_add_string password
 	proto_config_add_string allowedmode
 	proto_config_add_string allowedbands
+	proto_config_add_string excludedbands
 	proto_config_add_string preferredmode
 	proto_config_add_string pincode
 	proto_config_add_string iptype
@@ -618,7 +647,7 @@ proto_modemmanager_setup() {
 	local modempath modemstatus bearercount bearerpath connectargs bearerstatus beareriface
 	local bearermethod_ipv4 bearermethod_ipv6 auth cliauth
 	local operatorname operatorid registration accesstech signalquality
-	local allowedmode preferredmode allowedbands
+	local allowedmode preferredmode allowedbands excludedbands
 
 	local device apn allowedauth username password pincode
 	local iptype plmn metric signalrate allow_roaming
@@ -632,7 +661,7 @@ proto_modemmanager_setup() {
 
 	json_get_vars device apn allowedauth username password
 	json_get_vars pincode iptype sourcefilter plmn metric signalrate allow_roaming
-	json_get_vars allowedmode preferredmode allowedbands force_connection
+	json_get_vars allowedmode preferredmode allowedbands excludedbands force_connection
 
 	json_get_vars init_epsbearer
 	json_get_vars init_iptype init_allowedauth
@@ -663,6 +692,13 @@ proto_modemmanager_setup() {
 	# always cleanup before attempting a new connection, just in case
 	modemmanager_cleanup_connection "${modemstatus}"
 
+	if [ "$allowedbands" = supported-lte ] || [ -n "$excludedbands" ]; then
+		[ "$allowedmode" = 4g ] || { proto_notify_error "$interface" LTE_POLICY_REQUIRES_4G; return 1; }
+		allowedbands=$(modemmanager_resolve_lte_bands "$device" "$allowedbands" "$excludedbands") || {
+			proto_notify_error "$interface" INVALID_LTE_EXCLUSIONS
+			return 1
+		}
+	fi
 	modemmanager_apply_band_profile "$interface" "$device" "$allowedbands" "$allowedmode" "$preferredmode" || return 1
 
 	mmcli --modem="${device}" --timeout 120 --enable || {

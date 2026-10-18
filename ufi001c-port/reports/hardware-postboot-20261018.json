@@ -1,0 +1,31 @@
+{
+  "date_utc": "2026-10-18T12:47:54Z",
+  "scope": "Existing installed system, not a v3.2.0 image test",
+  "board": "thwc,ufi001c",
+  "radio_revision": "UFI001BC 20211121  1  [Nov 04 2016 02:00:00]",
+  "hardware_revision": "10000",
+  "result": "CURRENT_BOOT_LTE_DNS_PROXY_OK",
+  "allowed_modes": "allowed: 4g; preferred: none",
+  "bands": [
+    "eutran-1",
+    "eutran-3",
+    "eutran-5",
+    "eutran-8",
+    "eutran-38",
+    "eutran-39",
+    "eutran-40",
+    "eutran-41"
+  ],
+  "lte_health_passes": 3,
+  "proxy_doh_http200_passes": 3,
+  "router_dns_passes": 3,
+  "collection_start_uptime_seconds": 1038,
+  "collection_end_uptime_seconds": 1052,
+  "new_rf_events_during_collection": false,
+  "previous_system_reboot_cause": "not established; no readable pstore",
+  "limitations": [
+    "Short three-probe interval only",
+    "No new-image or new-stock-unit acceptance",
+    "No speed, long-duration or other-band registration certification"
+  ]
+}

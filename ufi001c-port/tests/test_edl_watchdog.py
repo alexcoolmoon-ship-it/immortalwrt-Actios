@@ -114,7 +114,7 @@ class WatchdogTests(unittest.TestCase):
             self.run_child("time.sleep(30)\n", action='wf', total_timeout=0.1)
         self.assertEqual(self.report()['reason'], 'total-timeout')
 
-    def test_backup_usb_failure_cannot_reach_confirmation_or_write(self):
+    def test_preflight_usb_failure_cannot_reach_confirmation_or_write(self):
         source = self.root/'firmware'; source.mkdir()
         args = argparse.Namespace(firmware=source, backups=self.root/'backups', edl_root=self.root)
         profile = {'id': 'fixture', 'disk_bytes': 512}

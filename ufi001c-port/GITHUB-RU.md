@@ -1,51 +1,48 @@
-# Страница проекта и сборка на GitHub
+# Собрать v3.2.0: ссылки и действия
 
-## Обновить существующий репозиторий
+Репозиторий: https://github.com/alexcoolmoon-ship-it/immortalwrt-Actios
 
-1. Откройте https://github.com/alexcoolmoon-ship-it/immortalwrt-Actios/upload/main .
-2. Загрузите **содержимое github-update**, а не ZIP и не сам каталог github-update.
-   В корне должны находиться README.md, ufi001c-port и .github/workflows.
-   Другие файлы репозитория не удаляйте.
-3. Если .github не загрузилась, откройте существующий
-   `.github/workflows/openwrt25-ufi001c.yml`, нажмите карандаш и вставьте текст
-   файла openwrt25-ufi001c.yml с верхнего уровня комплекта. Сохраните коммит. Первая строка должна содержать v3.1.5 LTE Recovery.
-4. Actions → OpenWrt 25.12.5 UFI001C v3.1.5 LTE Recovery → Run workflow → main.
-   Это новый запуск; Re-run старого задания использует старый код.
-5. После Success: Releases → Assets → UFI001C-OpenWrt-25.12.5-v3.1.5-USB.zip.
-   При выключенной публикации тот же ZIP находится в артефакте
-   UFI001C-v3.1.5-USB-Download. GitHub Source code — исходники, не образ.
+Workflow: https://github.com/alexcoolmoon-ship-it/immortalwrt-Actios/actions/workflows/openwrt25-ufi001c.yml
 
-## Создать отдельный проект
+Выпуски: https://github.com/alexcoolmoon-ship-it/immortalwrt-Actios/releases
 
-1. Создайте пустой публичный репозиторий в своём аккаунте, например UFI001C-OpenWrt.
-2. Распакуйте source-full.zip, загрузите содержимое в корень. В этом комплекте
-   оставлен только workflow этой прошивки. Родительские лицензии и авторство сохранены.
-3. В README.md и инструкциях замените ссылки immortalwrt-Actios на новый репозиторий.
-   README отобразится главной страницей. Запустите Actions как выше.
-4. Публикуемый выпуск помечается Pre-release до проверки на устройстве.
-   После проверки конкретного архива можно отредактировать выпуск и описать результат.
+## Обновить исходники
 
-В этот комплект не включены ваши пароли, proxy URL или дампы модема. Прошивка
-не содержит общего готового прокси: каждый владелец вводит свою ссылку.
-Доступ на запись в ваш аккаунт из этой сессии не использовался; архив ещё нужно
-загрузить и запустить сборку. Токены GitHub в чат передавать не требуется.
+В подготовленном пакете папка github-update содержит изменённые и новые файлы
+с путями относительно корня репозитория. Обновите их в ветке main, включая
+`.github/workflows/openwrt25-ufi001c.yml` и `.gitattributes`. Не создавайте лишний
+вложенный каталог github-update внутри репозитория. Полный бинарный образ прошивки
+изменением исходников не заменяется: его нужно скомпилировать.
 
-## Загрузить полные исходники через Git
+Сначала просмотрите CHANGED-FILES.txt и PATCH.diff. Удалите устаревший отдельный
+workflow из DELETE-FILES.txt: полный USB-ZIP теперь собирается основным workflow.
 
-В source-full.zip полные исходники. Для нового репозитория удобнее Git, чтобы
-не потерять .github при загрузке папок. Создайте пустой репозиторий
-`alexcoolmoon-ship-it/UFI001C-OpenWrt` без автоматического README, распакуйте
-source-full.zip и откройте CMD именно в папке с README.md и ufi001c-port:
+## Запустить
 
-```cmd
-git init -b main
-git add README.md README-UPSTREAM.md .github ufi001c-port
-git commit -m "UFI001C OpenWrt v3.1.5 LTE Recovery"
-git remote add origin https://github.com/alexcoolmoon-ship-it/UFI001C-OpenWrt.git
-git push -u origin main
-```
+1. Откройте Workflow по ссылке выше. Заголовок должен содержать **v3.2.0 Final Candidate / Portable USB**.
+2. Нажмите **Run workflow**, выберите обновлённую ветку **main**, оставьте
+   **publish_release=true** и запустите один раз.
+3. Сначала должен пройти **windows-tools**, затем **firmware**.
+4. После Success в Releases → Assets появится
+   **UFI001C-OpenWrt-25.12.5-v3.2.0-USB.zip** и его `.sha256`.
+   Запасной путь: Actions → выполненный запуск → Artifacts → **UFI001C-v3.2.0-USB-Download**.
+5. Распакуйте USB-ZIP целиком. Стоковый модем устанавливается через **INSTALL.cmd**.
 
-Нужен установленный Git и вход в свой GitHub. Если имя нового репозитория другое,
-замените URL в remote add. Этот способ предназначен для новой распакованной
-папки без существующего .git; существующий репозиторий повторно инициализировать
-не требуется. Ссылки в README обновите на этот же URL.
+GitHub Source code ZIP, пакет обновления исходников и build-log не являются
+готовой прошивкой. Успешная компиляция обязательна: она создаёт boot.img/system.img
+и проверенные Windows-программы. Время зависит от кэша и загрузок, заранее не фиксируется.
+
+Рабочая ветка `codex/ufi001c-final-v3.2.0` также собирается при push, но такой запуск
+только сохраняет артефакты. Для публикации Assets используется ручной Run workflow.
+Публикация — Pre-release до аппаратного испытания нового образа.
+
+## Зафиксированные исходники
+
+- OpenWrt: https://github.com/openwrt/openwrt/tree/f0a60eee2fe051741c643ea6118718aae1ef17fb
+- Дополнения и версии: `ufi001c-port/addons.lock.json`.
+- EDL: https://github.com/bkerler/edl/tree/1cda1a616748d608667b2d13b73a28d3197ceb45
+- Loaders: https://github.com/bkerler/Loaders/tree/6c416255056a178f54ccd7ee9b67d04a5bdfa8e6
+- Хэши и выбранные loaders: `ufi001c-port/migration/windows-runtime.lock.json`.
+- Загрузочные компоненты: `ufi001c-port/migration/BASE-SOURCES.md`.
+
+Индивидуальные дампы eMMC, NV, SIM-идентификаторы и proxy URL в Git не добавляются.

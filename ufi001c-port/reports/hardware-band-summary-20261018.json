@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-18",
+  "installed_firmware": "v3.1.5; new v3.1.6 image not tested",
+  "scope": "one thwc,ufi001c / UFI001BC 20211121 / HW10000 with its own NV",
+  "aggregate_sha256": "dc69e1be6481196f65aac60fba1f78a2a362e55ce757f3c6e767b6f4e1741513",
+  "reproduced_rf_trigger_bands": [
+    7,
+    20
+  ],
+  "registered_without_new_rf_assert": [
+    1,
+    3
+  ],
+  "no_registration_inconclusive": [
+    5,
+    8,
+    38,
+    39,
+    40,
+    41
+  ],
+  "kept_bands": [
+    1,
+    3,
+    5,
+    8,
+    38,
+    39,
+    40,
+    41
+  ],
+  "lte_only": true,
+  "per_band_data_test": false,
+  "combined_kept_mask_data_test": "not yet performed",
+  "wifi": "client disconnect/reconnect events present; no AP reload or cause established by this report",
+  "last_recovery": {
+    "all_planned_rf_results_saved": true,
+    "overall_result": "RECOVERY_NOT_CONFIRMED",
+    "kernel_lte": "link/address/default route present",
+    "singbox_dns": "A answer received",
+    "router_dns": "one A query timed out",
+    "doh_via_proxy": "earlier probe passed, final probe failed",
+    "service_fetch": "GitHub and OpenWrt passed",
+    "new_engine_error": "XHTTP download: unexpected status 504 Gateway Timeout",
+    "attribution": "intermittent tunnel/server-side HTTP error; no new RF assertion on B41"
+  }
+}

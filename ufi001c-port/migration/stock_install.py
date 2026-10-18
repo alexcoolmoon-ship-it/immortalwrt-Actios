@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import shutil
+import stat
 import struct
 import subprocess
 import sys
@@ -31,8 +32,9 @@ _spec.loader.exec_module(update)
 from radio_backup import read_at, read_gpt, copy_and_hash
 from edl_watchdog import run_edl, EDLError
 from chunk_backup import full_backup, read_range, exclusive
+from radio_report import summarize as summarize_radio
 
-VERSION = '3.1.5-rc1'
+VERSION = '3.2.0-rc1'
 SECTOR = 512
 GIB = 1024**3
 NV = ('modemst1', 'modemst2', 'fsg', 'fsc', 'sec')
@@ -45,7 +47,8 @@ LIMITS = {'boot.img': 64*1024**2, 'system.img': GIB,
           'routing-rootfs-check.json': 65536, 'kernel-routing-check.txt': 16384,
           'validation.json': 65536, 'release-info.json': 16384,
           'INSTALL-RU.md': 65536, 'VALIDATION-v3.1.2.md': 65536,
-          'VALIDATION-v3.1.3.md': 65536, 'VALIDATION-v3.1.4.md': 65536, 'VALIDATION-v3.1.5.md': 65536}
+          'VALIDATION-v3.1.3.md': 65536, 'VALIDATION-v3.1.4.md': 65536, 'VALIDATION-v3.1.5.md': 65536, 'VALIDATION-v3.1.6.md': 65536,
+          'VALIDATION-v3.2.0.md': 65536}
 
 
 def digest_bytes(data):
@@ -166,7 +169,8 @@ def check_stock(dump, profile):
         raise ValueError('Not the known factory UFI001C layout; no writes performed')
     with dump.open('rb') as f:
         if copy_and_hash(f, parts['modem']) != profile['stock_modem_sha256']:
-            raise ValueError('Different factory radio/board revision; requires a separate compatibility check')
+            raise ValueError('Different factory radio partition hash; board revision is NOT established. '
+                             'No writes started. Run CHECK-BACKUP.cmd on the saved emmc.bin.')
         hashes = {name: copy_and_hash(f, parts[name]) for name in NV}
         for name in ANCHORS:
             data = read_at(f, parts[name]['offset_bytes'], parts[name]['size_bytes'])
@@ -346,16 +350,25 @@ def make_plan(dump, profile, base, work, prepared):
 
 class EDL:
     def __init__(self, root, log):
-        self.root = Path(root).resolve()
-        self.exe = self.root / ('.venv/Scripts/python.exe' if sys.platform == 'win32' else '.venv/bin/python')
+        from portable_runtime import bundled_edl
+        self.portable = bundled_edl()
+        self.root = self.portable or Path(root).resolve()
+        self.exe = (self.root / 'UFI-EDL.exe' if self.portable else
+                    self.root / ('.venv/Scripts/python.exe' if sys.platform == 'win32' else '.venv/bin/python'))
         self.log = Path(log)
-        if not self.exe.is_file() or not (self.root / 'edl.py').is_file():
+        self.checked_usb = False
+        if not self.exe.is_file() or (not self.portable and not (self.root / 'edl.py').is_file()):
             raise ValueError('Working EDL environment not found. Set UFI_EDL_ROOT to its folder.')
 
     def __call__(self, action, *args):
         # EDL may return success even when a programmer rejects a write.
         # Every mutation therefore MUST be followed by an independent readback.
-        command = [str(self.exe), '-u', str(self.root / 'edl.py'), action,
+        if self.portable and not self.checked_usb:
+            from portable_runtime import require_single_edl
+            require_single_edl()
+            self.checked_usb = True
+        prefix = [str(self.exe)] if self.portable else [str(self.exe), '-u', str(self.root / 'edl.py')]
+        command = [*prefix, action,
                    *map(str, args), '--memory=emmc', '--sectorsize=512']
         run_edl(command, self.root, action, args, self.log)
 
@@ -510,7 +523,16 @@ def install_locked(args, locks):
     preview = run / 'stock-gpt-preview.bin'
     edl('rs', 0, 34, preview)
     profile = preview_profile(preview, base)
-    print(f"Найден профиль: {profile['id']}, {profile['disk_bytes']} байт. Проверка радио ещё впереди.", flush=True)
+    print(f"Найдена разметка: {profile['id']}, {profile['disk_bytes']} байт. Проверяем радио до полного бэкапа.", flush=True)
+    # Unknown radio stops here, before a multi-gigabyte backup and before all
+    # device writes. A completed older backup can be inspected fully offline.
+    try:
+        radio_preflight(edl, profile, run)
+    except (ValueError, OSError, subprocess.CalledProcessError):
+        print('Предварительная проверка остановлена. Запись НЕ НАЧИНАЛАСЬ.\n'
+              'Полный бэкап в этом запуске ещё не читался. Сохраните stock-probe.json,\n'
+              'если он создан, и edl.log. Старые бэкапы не удаляйте.', flush=True)
+        raise
     existing_bytes = min((run/'emmc.partial').stat().st_size, profile['disk_bytes']) if (run/'emmc.partial').is_file() else 0
     if (run/'emmc.bin').is_file(): existing_bytes = min((run/'emmc.bin').stat().st_size, profile['disk_bytes'])
     needed = profile['disk_bytes'] - existing_bytes + 4*GIB
@@ -557,8 +579,11 @@ def install_locked(args, locks):
         if sys.platform == 'win32': os.startfile(str(run / 'ACCESS.txt'))
 
 
-PACKAGE_FILES = ('stock_install.py', 'ufi-install.py', 'radio_backup.py', 'edl_watchdog.py', 'chunk_backup.py',
-                 'INSTALL.cmd', 'RESUME.cmd', 'RESTORE.cmd', 'MAKE-BUNDLE.cmd', 'STOCK-CHECK.cmd',
+PACKAGE_FILES = ('stock_install.py', 'ufi-install.py', 'radio_backup.py', 'radio_report.py', 'edl_watchdog.py', 'chunk_backup.py',
+                 'portable_runtime.py', 'runtime_manifest.py', 'windows_entry.py', 'windows_edl.py', 'windows-runtime.lock.json',
+                 'RUN.cmd', 'CHECK-PC.cmd', 'DRIVER-HELP.cmd', 'DRIVER-RU.txt',
+                 'CHECK-LTE.cmd', 'ufi-postboot-check.sh',
+                 'INSTALL.cmd', 'RESUME.cmd', 'RESTORE.cmd', 'MAKE-BUNDLE.cmd', 'STOCK-CHECK.cmd', 'CHECK-BACKUP.cmd',
                  'README-STOCK-RU.md', 'VALIDATION-STOCK.md', 'BASE-SOURCES.md')
 
 
@@ -573,6 +598,12 @@ def bundle(args):
     if output.exists(): raise ValueError('Файл уже существует: '+str(output)+'; переименуйте его или выберите другой --output')
     if shutil.disk_usage(output.parent).free < 3*GIB: raise ValueError('Need 3 GB free to validate and package images')
     check_base(HERE/'stock-base')
+    runtime = getattr(args, 'windows_runtime', None)
+    if runtime is None and (HERE/'runtime').is_dir():
+        runtime = HERE/'runtime'
+    if runtime:
+        from runtime_manifest import verify_runtime
+        verify_runtime(runtime, HERE)
     with tempfile.TemporaryDirectory(prefix='ufi-bundle-', dir=output.parent) as tmp:
         work=Path(tmp); images=firmware_files(source, work/'images')
         prepared=work/'prepared'; prepared.mkdir()
@@ -585,6 +616,9 @@ def bundle(args):
                 if path.is_file(): archive.write(path, prefix+'stock-base/'+path.name)
             for path in sorted(images.iterdir()):
                 archive.write(path, prefix+path.name)
+            if runtime:
+                for path in sorted(Path(runtime).rglob('*')):
+                    if path.is_file(): archive.write(path, prefix+'runtime/'+path.relative_to(runtime).as_posix())
         with zipfile.ZipFile(building) as archive:
             if archive.testzip() is not None: raise ValueError('Generated ZIP integrity check failed')
         # Exclusive creation, so an existing release is never overwritten.
@@ -633,6 +667,68 @@ def restore(args):
     print('СТОК ВОССТАНОВЛЕН И СВЕРЕН. Переподключите USB без кнопки.', flush=True)
 
 
+def radio_preflight(edl, profile, run, output=None):
+    """Verify both GPT copies and radio with bounded reads; never write USB."""
+    size = profile['disk_bytes']
+    primary = run / 'stock-gpt-preview.bin'
+    secondary = run / 'stock-gpt-secondary.bin'
+    edl('rs', size//SECTOR-33, 33, secondary)
+    if secondary.stat().st_size != 33*SECTOR:
+        raise ValueError('Incomplete secondary GPT read')
+    parts = validate_gpt(GPTView(size, primary.read_bytes(), secondary.read_bytes()), size)
+    radio = run / 'stock-radio.bin'
+    read_range(edl, parts['modem']['first_lba'], parts['modem']['size_bytes']//SECTOR, radio)
+    report = summarize_radio(radio.read_bytes(), profile)
+    report.update(installer=VERSION, gpt_disk_bytes=size,
+                  gpt_copies='CRC and table equality verified',
+                  writes_performed=False, full_backup_created=False)
+    output = output or run / 'stock-probe.json'
+    save_json(output, report)
+    print('ОТЧЁТ: ' + str(output), flush=True)
+    if not report['stock_modem_hash_matches']:
+        raise ValueError('SHA256 раздела радио отличается. Это ещё не доказательство другой платы. '
+                         'Запись НЕ НАЧИНАЛАСЬ. Пришлите stock-probe.json для проверки совместимости.')
+    return report
+
+
+def check_backup(args):
+    """Inspect the existing backup only; no EDL object and no modem required."""
+    dump = args.backup or select_path('Выберите сохранённый emmc.bin (модем не нужен)', args.backups, 'backup')
+    dump = Path(dump).resolve(strict=True)
+    if dump.suffix == '.partial' or not stat.S_ISREG(dump.stat().st_mode):
+        raise ValueError('Select a complete regular emmc.bin, not emmc.partial or a device')
+    parts = validate_gpt(dump)
+    geometry = [[p['name'], p['first_lba'], p['last_lba']] for p in parts.values()]
+    profiles = [json.loads(p.read_text(encoding='utf-8'))
+                for p in sorted((HERE/'stock-base').glob('stock-profile*.json'))]
+    matches = [p for p in profiles if p['disk_bytes'] == dump.stat().st_size and p['geometry'] == geometry]
+    if len(matches) != 1:
+        raise ValueError('Backup GPT does not match a known stock layout; no files changed')
+    part = parts['modem']
+    with dump.open('rb') as src:
+        data = read_at(src, part['offset_bytes'], part['size_bytes'])
+    report = summarize_radio(data, matches[0])
+    report.update(installer=VERSION, backup_bytes=dump.stat().st_size,
+                  gpt_copies='CRC and table equality verified',
+                  scope='Offline GPT and radio check; not a full backup checksum or live-device check',
+                  usb_accessed=False, writes_performed=False)
+    # Unique local report folder; do not modify the backup or its checkpoints.
+    folder = new_run(dump.parent/'compatibility-reports')
+    output = folder/'stock-probe.json'
+    save_json(output, report)
+    # Only the firmware partition, no modemst/fsg/fsc/userdata or other NV.
+    archive = folder/'ufi-stock-radio.zip'
+    with zipfile.ZipFile(archive, 'x', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+        z.writestr('modem.img', data)
+        z.writestr('stock-probe.json', json.dumps(report, indent=2, ensure_ascii=False))
+    print('Проверка завершена БЕЗ подключения модема и БЕЗ записи на него.\n'
+          'Для проверки совместимости: ' + str(archive) + '\n'
+          'Полный emmc.bin отправлять не нужно.\n'
+          'Этот отчёт не разрешает установку неизвестного радио.', flush=True)
+    if sys.platform == 'win32': os.startfile(str(folder))
+    return report
+
+
 def probe(args):
     """Read only GPT copies and factory radio; never read or export NV data."""
     run = new_run(args.backups)
@@ -643,30 +739,10 @@ def probe(args):
     primary = run / 'stock-gpt-preview.bin'
     edl('rs', 0, 34, primary)
     profile = preview_profile(primary, HERE / 'stock-base')
-    size = profile['disk_bytes']
-    secondary = run / 'stock-gpt-secondary.bin'
-    edl('rs', size//SECTOR-33, 33, secondary)
-    if secondary.stat().st_size != 33*SECTOR:
-        raise ValueError('Incomplete secondary GPT read')
-    parts = validate_gpt(GPTView(size, primary.read_bytes(), secondary.read_bytes()), size)
-    radio = run / 'stock-radio.bin'
-    edl('rs', parts['modem']['first_lba'], parts['modem']['size_bytes']//SECTOR, radio)
-    if radio.stat().st_size != parts['modem']['size_bytes']:
-        raise ValueError('Incomplete factory radio read')
-    digest = update.sha(radio)
-    report = {'installer': VERSION, 'profile': profile['id'], 'gpt_disk_bytes': size,
-              'gpt_copies': 'CRC and table equality verified', 'stock_modem_sha256': digest,
-              'stock_modem_hash_matches': digest == profile['stock_modem_sha256'],
-              'writes_performed': False, 'full_backup_created': False,
-              'hardware_boot_test': 'pending',
-              'next_step': 'Full backup, physical capacity and own NV checks are still mandatory during install.'}
-    output = args.output or run / 'stock-probe.json'
-    if Path(output).exists(): raise ValueError('Report already exists: ' + str(output))
-    save_json(output, report)
+    if args.output and Path(args.output).exists(): raise ValueError('Report already exists: ' + str(args.output))
+    report = radio_preflight(edl, profile, run, args.output)
     print(json.dumps(report, indent=2, ensure_ascii=False), flush=True)
-    print('ОТЧЁТ: ' + str(output) + '\nЗаписи в память модема не было. Полный бэкап ещё не создан.', flush=True)
-    if not report['stock_modem_hash_matches']:
-        raise ValueError('Другая радиопрошивка. Пришлите только stock-probe.json; установщик сохраняет запрет записи.')
+    print('Записи в память модема не было. Полный бэкап ещё не создан.', flush=True)
 
 
 def resume_install(args):
@@ -676,7 +752,7 @@ def resume_install(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['install', 'resume', 'restore', 'bundle', 'probe'])
+    parser.add_argument('action', choices=['install', 'resume', 'restore', 'bundle', 'probe', 'check-backup'])
     parser.add_argument('--version', action='version', version='UFI stock installer '+VERSION)
     parser.add_argument('--edl-root', type=Path, default=Path(os.environ.get('UFI_EDL_ROOT', str(Path.home()/'edl'))))
     parser.add_argument('--backups', type=Path, default=Path.home()/'UFI001C-backups')
@@ -684,11 +760,17 @@ def main():
     parser.add_argument('--backup', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--resume', type=Path)
+    parser.add_argument('--windows-runtime', type=Path)
     args = parser.parse_args()
     print('UFI001C: простой переход со стока — '+VERSION, flush=True)
     try:
-        {'install': install, 'resume': resume_install, 'restore': restore, 'bundle': bundle, 'probe': probe}[args.action](args)
+        {'install': install, 'resume': resume_install, 'restore': restore, 'bundle': bundle,
+         'probe': probe, 'check-backup': check_backup}[args.action](args)
     except (OSError, ValueError, EOFError, zipfile.BadZipFile, subprocess.CalledProcessError) as exc:
+        if args.action in ('check-backup', 'probe', 'bundle'):
+            print('\nSTOP: ' + str(exc) + '\nЭта операция не выполняет запись на модем. '
+                  'Сохраните исходный бэкап.', file=sys.stderr)
+            return 1
         print('\nSTOP: '+str(exc)+'\nЕсли запись уже начиналась, сохраните EDL и используйте RESTORE.cmd.\n'
               'Бэкапы находятся в '+str(args.backups)+'. Не удаляйте их.', file=sys.stderr)
         return 1

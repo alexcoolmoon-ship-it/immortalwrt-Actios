@@ -54,7 +54,11 @@ bearer_identity() {
     bearer=$(printf '%s' "$modem" | jq -er '
       select(.modem.generic.state == "connected") | .modem.generic.bearers |
       select(length == 1) | .[0] |
-      select(test("^/org/freedesktop/ModemManager1/Bearer/[0-9]+$"))') || return 1
+      select(if type != "string" then false
+        elif startswith("/org/freedesktop/ModemManager1/Bearer/") then
+          ltrimstr("/org/freedesktop/ModemManager1/Bearer/") |
+          length > 0 and (explode | all(. >= 48 and . <= 57))
+        else false end)') || return 1
     data=$(mmcli --bearer="$bearer" --timeout=10 --output-json 2>/dev/null) || return 1
     printf '%s' "$data" | jq -ceS --arg b "$bearer" --argjson s "$session" '
       .bearer | select(.status.connected == "yes" and .status.suspended == "no") |
@@ -82,15 +86,25 @@ budget() {
     now=$(cut -d. -f1 /proc/uptime)
     start=$now; count=0; last=0
     if [ -f "$state" ]; then
-        read -r start count last < "$state" || return 1
-        case "$start:$count:$last" in *[!0-9:]*) return 1 ;; esac
+        # An empty line makes read succeed with three empty fields. Reject it
+        # before arithmetic; never clear the retry limit on corrupted state.
+        local extra='' field
+        read -r start count last extra < "$state" || return 1
+        [ -z "$extra" ] || return 1
+        for field in "$start" "$count" "$last"; do
+            case "$field" in ''|*[!0-9]*) return 1 ;; esac
+            [ "${#field}" -le 9 ] || return 1
+            case "$field" in 0|[1-9]*) ;; *) return 1 ;; esac
+        done
+        [ "$last" -ge "$start" ] && [ "$last" -le "$now" ] || return 1
     fi
     if [ "$now" -lt "$start" ] || [ $((now - start)) -ge 600 ]; then
         start=$now; count=0; last=0
     fi
     [ "$count" -lt 3 ] && { [ "$count" -eq 0 ] || [ $((now - last)) -ge 60 ]; } || return 1
     # Account before the first write, including a failed attempt.
-    printf '%s %s %s\n' "$start" "$((count + 1))" "$now" > "$state"
+    printf '%s %s %s\n' "$start" "$((count + 1))" "$now" > "$state.tmp.$$" &&
+        mv "$state.tmp.$$" "$state"
 }
 
 repair() {

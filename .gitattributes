@@ -1,0 +1,13 @@
+# Keep installer source hashes identical in Windows and Linux jobs.
+/ufi001c-port/**/*.py text eol=lf
+/ufi001c-port/**/*.sh text eol=lf
+/ufi001c-port/**/*.jq text eol=lf
+/ufi001c-port/**/*.json text eol=lf
+/ufi001c-port/**/*.md text eol=lf
+/ufi001c-port/**/*.txt text eol=lf
+/ufi001c-port/**/Makefile text eol=lf
+/ufi001c-port/**/*.cmd text eol=crlf
+/ufi001c-port/**/*.bin -text
+/ufi001c-port/**/*.mbn -text
+/ufi001c-port/**/*.part-* -text
+/.github/workflows/*.yml text eol=lf

@@ -1,0 +1,145 @@
+{
+  "format": 1,
+  "version": "3.2.0-rc1",
+  "edl": {
+    "repository": "https://github.com/bkerler/edl.git",
+    "commit": "1cda1a616748d608667b2d13b73a28d3197ceb45",
+    "requirements_sha256": "d5e11f974951f0c45be97ddc8955d8e922be15ef9f74b2493e417ef6d44d2406",
+    "uv_lock_sha256": "0c8a526a762843aac5d59d6ea82281fc544459459833aa31bf9bf2c8005dcdf1",
+    "entry_sha256": "e6c575fe3d01705d3c4327a87a093e30644dd34183697f769cb215094d00b5a6",
+    "windows_dll_sha256": "6b24b0ee1a59cbae385dd15b06eddf2c72b2ff3a875ae279883a880136c59ec8",
+    "zadig_sha256": "20e4cd7b6768718848f603fe928f36e207dc5ca96fc9db7085d841410d0abae4"
+  },
+  "loaders": {
+    "repository": "https://github.com/bkerler/Loaders.git",
+    "commit": "6c416255056a178f54ccd7ee9b67d04a5bdfa8e6",
+    "files": {
+      "TCL/007050e100420011_625801c51eee90d7_fhprg_peek.bin": {
+        "sha256": "5056b2214154c0a73139d10f943f67b07b68e6bb4cb765552ab9064881152d0b",
+        "bytes": 109484
+      },
+      "TCL/007050e100420015_56b7ce50c89798f1_fhprg_peek.bin": {
+        "sha256": "9da07dbe925d832a93a9aae02b7a3f1837adce443f8af4833d38d65c606c74c4",
+        "bytes": 104004
+      },
+      "TCL/007050e100420018_faf5c7a62884b4db_fhprg_peek.bin": {
+        "sha256": "892fe7394784b48c4540a23110cdebff176dee4a1c36c83bd2950f1467cd1a1c",
+        "bytes": 109540
+      },
+      "asus_wingtech/007050e100010001_0b010bcb83a7b520_fhprg_peek.bin": {
+        "sha256": "4ee67c3abc4ed4fc23f088df391abab337a0c721e1b5bab2c49d25209ec90aeb",
+        "bytes": 97284
+      },
+      "asus_wingtech/007050e10029001e_cc3153a80293939b_fhprg_peek.bin": {
+        "sha256": "ae162be1409cdd6505489b86db04fb9ff83bd6da517adecbf82d9ca3f9f282a5",
+        "bytes": 97260
+      },
+      "asus_wingtech/007050e111112222_f069a87f6d4364ef_fhprg_peek.bin": {
+        "sha256": "1d72f6f1f7785478428088541549c4125b493e7122269aef01554c8b27c28447",
+        "bytes": 97924
+      },
+      "cyanogen/007050e100000000_4614048173062ae4_fhprg_peek.bin": {
+        "sha256": "77b61a9a347335169bda1cfed183a44b0c25473bc75468b9ff4896406050d850",
+        "bytes": 97228
+      },
+      "cyanogen/007050e100000000_4e3eefa63a67eb7a_fhprg_peek.bin": {
+        "sha256": "efaa85cca579738578bd1ec7c7432a7c6000d1c72a4a16e67d7c20606bfec0ac",
+        "bytes": 93116
+      },
+      "cyanogen/007050e100000000_d36c6073c9c2cb1c_fhprg_peek.bin": {
+        "sha256": "9cea3b749e87a8369e48bf560bcc3c851015e3e900bbf17b2b5d2c0585a2daa7",
+        "bytes": 97280
+      },
+      "lenovo_motorola/007050e100000000_99c8c13e374c34d8_fhprg_peek.bin": {
+        "sha256": "959439aa5864685999b713c3ed12ad5fa408149648b670a9a9ef77bcc9dcab14",
+        "bytes": 93288
+      },
+      "lenovo_motorola/007050e100170003_612517313979e703_fhprg_peek.bin": {
+        "sha256": "d8b5cf1b8c45bd42294041a1e7653beb40df59080aacaa8b84802b76caa033be",
+        "bytes": 97476
+      },
+      "lenovo_motorola/007050e100280000_59b38969c8b392f1_fhprg.bin": {
+        "sha256": "08977322190e962baf568e1d969721903ba9f2641538414286cd077036cd6195",
+        "bytes": 59596
+      },
+      "longcheer/007050e100000000_3022817d373fd7f9_fhprg_peek.bin": {
+        "sha256": "53d9d1805f13c38e89581529557bf2749ae4973ce041a5a92555d6ced53e0322",
+        "bytes": 93116
+      },
+      "lyf/007050e100000000_394a2e47cf830150_fhprg_peek.bin": {
+        "sha256": "53f193500c03248f0d671ab57bfe9ca8a42967e97f28403294b4b3f854075aca",
+        "bytes": 97972
+      },
+      "qualcomm/factory/msm8916/007050e100000000_394a2e47cf830150_fhprg_peek.bin": {
+        "sha256": "53f193500c03248f0d671ab57bfe9ca8a42967e97f28403294b4b3f854075aca",
+        "bytes": 97972
+      },
+      "qualcomm/factory/msm8916/007050e100000000_8ecf3eaa03f772e2_fhprg_peek.bin": {
+        "sha256": "314b1aefe802f5dfb794ddd6320e9a449a3497c84b877e778e78427fca393ebd",
+        "bytes": 97792
+      },
+      "qualcomm/factory/msm8916/007050e100170003_612517313979e703_fhprg_peek.bin": {
+        "sha256": "df06163b310148f928a712f353ec2a74f99faa0ef2773ff198db614ea5991df0",
+        "bytes": 97476
+      },
+      "qualcomm/factory/msm8916/007050e100420001_ec287e5aa0bf4e3e_fhprg_peek.bin": {
+        "sha256": "b69677d55976e465cea468ebfffc15ba50dc3739adacb8925a02f0c019de0959",
+        "bytes": 110012
+      },
+      "qualcomm/factory/msm8916/007050e100420011_625801c51eee90d7_fhprg_peek.bin": {
+        "sha256": "0da076418ffddfd826e719b9894876545b987490e393cceb49e0f9c0539e4d9e",
+        "bytes": 102400
+      },
+      "xiaomi/007050e100000000_278448179ac756a1_fhprg_peek.bin": {
+        "sha256": "72c785b2221a8524be61d0fd621dbfcf9e93ecdb9a5dae78deb09386f04e290f",
+        "bytes": 96452
+      },
+      "xiaomi/007050e100000000_50838757eab7c632_fhprg_peek_wt88047.bin": {
+        "sha256": "121a63e229d30172757f8554b232b5162937bfdb7cd42740e6fbfc1c8630ad1b",
+        "bytes": 93148
+      },
+      "xiaomi/prog_emmc_firehose_8916_gucci_peek.mbn": {
+        "sha256": "081b5fa07a28fd9702a54980a149fd4430e3686eb82e530181571c3f73bc0771",
+        "bytes": 89028
+      },
+      "yulong_coolpad/007050e100480000_0dc319ba152db35e_fhprg_peek.bin": {
+        "sha256": "86d261a96b0475bbbc489da4add10c0b5264a31cf63746b9831a2b000f9309dd",
+        "bytes": 93108
+      },
+      "zte/007050e100040000_201d20512f1839d9_fhprg_peek.bin": {
+        "sha256": "7640ceff79ce3ddc496d9b723bb03df0251f4651856db1009dfd4e68902aeb89",
+        "bytes": 219416
+      },
+      "zte/007050e100040000_38cf1c8bc0416b47_fhprg_peek.bin": {
+        "sha256": "6b6f93ca699c9ebe5d9766321bce88a9fd42e5b0ddedcdf201c6badb0b93dbe7",
+        "bytes": 217768
+      },
+      "zte/007050e100040000_44dedb80c4ecbb07_fhprg_peek.bin": {
+        "sha256": "9810ee04aeec40164a8559ddc3de323cad7614a0931d06cfa13071894de5f40c",
+        "bytes": 228848
+      },
+      "zte/007050e100040000_693e38e5ef816bd8_fhprg_peek.bin": {
+        "sha256": "a9810c2c6dc7f3c3a860831bea312ebaaba279041d1bcea9c254a70768d1594f",
+        "bytes": 228788
+      },
+      "zte/007050e100040000_ae2fc66c75ad0fab_fhprg_peek.bin": {
+        "sha256": "669be6a73a21c54adb77277814dd79610e32453d74b21f804f2d0f9697585722",
+        "bytes": 228848
+      },
+      "zte/007050e100040000_eadae385d54ec66b_fhprg_peek.bin": {
+        "sha256": "77f2ee1ef17d0d5435604c4e3229d391baeb2a2d01762fb8f308b20db09d1706",
+        "bytes": 219416
+      },
+      "zte/007050e100040000_f02215c75cf9f072_fhprg_peek.bin": {
+        "sha256": "e9472223edf43a6728875d2e8e1f2047efcf2fc9698910c3a133b0ffcac0567e",
+        "bytes": 93108
+      },
+      "zte/007050e100040000_fb428087df560b47_fhprg_peek.bin": {
+        "sha256": "7a28db005dc12007c318d718d411285196a67d1b8f8bf94966395a3094aec662",
+        "bytes": 228788
+      }
+    }
+  },
+  "uv_version": "0.12.23",
+  "pyinstaller_version": "6.22.3"
+}

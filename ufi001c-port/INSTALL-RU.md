@@ -1,4 +1,10 @@
-# UFI001C — установка v3.1.5 LTE Recovery
+# v3.2.0: единый USB-комплект
+
+Стоковый модем: [короткая инструкция](migration/README-STOCK-RU.md), полный USB-ZIP,
+INSTALL.cmd. Python и EDL включены. Новый Windows-ПК: DRIVER-HELP.cmd при необходимости.
+Для уже установленного OpenWrt используйте процедуру ниже; конвертация со стока не подходит.
+
+# UFI001C — установка v3.2.0 Final Candidate
 
 OpenWrt 25.12.5, Podkop 0.7.24, XHTTP r12. Статус: кандидат, аппаратная приёмка
 ещё нужна. Один готовый USB-ZIP появится после успешной сборки. Архив исходников
@@ -6,7 +12,7 @@ OpenWrt 25.12.5, Podkop 0.7.24, XHTTP r12. Статус: кандидат, ап�
 
 ## 1. Обновить GitHub и собрать
 
-1. Распакуйте `UFI001C-v3.1.5-LTE-Recovery-source.zip`.
+1. Распакуйте `UFI001C-LTE-Fix-v3.2.0.zip`.
    Загрузите содержимое `github-update` с заменой в корень репозитория:
    https://github.com/alexcoolmoon-ship-it/immortalwrt-Actios/upload/main
    Саму папку `github-update` и архив ZIP загружать в корень не нужно.
@@ -16,15 +22,15 @@ OpenWrt 25.12.5, Podkop 0.7.24, XHTTP r12. Статус: кандидат, ап�
    комплекта. Это копия `.github/workflows/openwrt25-ufi001c.yml`.
    Каталог в репозитории называется строго `.github`, в нижнем регистре.
 3. Сохраните коммит в main. Первая строка workflow должна быть:
-   `name: OpenWrt 25.12.5 UFI001C v3.1.5 LTE Recovery (USB installer rc1)`.
+   `name: OpenWrt 25.12.5 UFI001C v3.2.0 Final Candidate (USB installer rc1, CI r2)`.
 4. Откройте Actions:
    https://github.com/alexcoolmoon-ship-it/immortalwrt-Actios/actions/workflows/openwrt25-ufi001c.yml
    **Run workflow → main**, публикация включена. Нужен новый запуск:
    Re-run старого задания использует старый коммит.
 5. После Success откройте Releases:
    https://github.com/alexcoolmoon-ship-it/immortalwrt-Actios/releases
-   Скачайте из Assets **UFI001C-OpenWrt-25.12.5-v3.1.5-USB.zip**.
-   При выключенной публикации скачайте артефакт **UFI001C-v3.1.5-USB-Download**
+   Скачайте из Assets **UFI001C-OpenWrt-25.12.5-v3.2.0-USB.zip**.
+   При выключенной публикации скачайте артефакт **UFI001C-v3.2.0-USB-Download**
    на странице успешного запуска и распакуйте внешний ZIP.
 
 Сборка проверяет фактическую конфигурацию ядра, новые файлы в rootfs и ARM64-движок
@@ -38,19 +44,19 @@ OpenWrt 25.12.5, Podkop 0.7.24, XHTTP r12. Статус: кандидат, ап�
 
 ```cmd
 if not exist "%USERPROFILE%\UFI001C-backups" mkdir "%USERPROFILE%\UFI001C-backups"
-scp -O root@192.168.1.1:/etc/config/podkop "%USERPROFILE%\UFI001C-backups\podkop-before-v3.1.5.conf"
+scp -O root@192.168.1.1:/etc/config/podkop "%USERPROFILE%\UFI001C-backups\podkop-before-v3.2.0.conf"
 ```
 
 Продолжайте после успешного копирования. Этот файл содержит личную прокси-ссылку;
 он не заменяет полный бэкап и не предназначен для публикации.
 
 Из готового USB-ZIP перенесите содержимое `UFI001C-USB` в
-`%USERPROFILE%\openwrt25-v3.1.5`, чтобы там сразу лежали boot.img, system.img,
+`%USERPROFILE%\openwrt25-v3.2.0`, чтобы там сразу лежали boot.img, system.img,
 SHA256SUMS и ufi-install.py. Оставьте подключаемым один модем. Отключите его,
 зажмите кнопку, подключите к USB и отпустите кнопку — режим EDL.
 
 ```cmd
-cd /d "%USERPROFILE%\openwrt25-v3.1.5"
+cd /d "%USERPROFILE%\openwrt25-v3.2.0"
 "%USERPROFILE%\edl\.venv\Scripts\python.exe" ufi-install.py backup --images "%USERPROFILE%\UFI001C-backups"
 ```
 
@@ -69,7 +75,7 @@ cd /d "%USERPROFILE%\openwrt25-v3.1.5"
 Сначала проверьте LTE по разделу 4. Затем восстановите только Podkop:
 
 ```cmd
-scp -O "%USERPROFILE%\UFI001C-backups\podkop-before-v3.1.5.conf" root@192.168.1.1:/tmp/podkop.saved
+scp -O "%USERPROFILE%\UFI001C-backups\podkop-before-v3.2.0.conf" root@192.168.1.1:/tmp/podkop.saved
 ssh root@192.168.1.1 "cp /tmp/podkop.saved /etc/config/podkop && chmod 600 /etc/config/podkop && /etc/init.d/podkop restart"
 ```
 
@@ -111,13 +117,15 @@ ssh root@192.168.1.1 "cp /tmp/podkop.saved /etc/config/podkop && chmod 600 /etc/
 cat /etc/ufi001c-release
 uci get network.modem.allowedmode
 uci get network.modem.allowedbands
+uci -q get network.modem.excludedbands
 mmcli -m any
 ufi-lte-health status
 ip -4 route get 77.88.8.8
-logread | grep -E 'ufi-lte-health|rflte_msm|handling crash' | tail -20
+logread | grep -E 'ufi-lte-health|rflte_|handling crash' | tail -20
 ```
 
-Ожидается версия 3.1.5, `4g`, B1/B3/B7, connected/LTE; три значения
+Ожидается версия 3.1.6, `4g`, supported-lte с исключениями B7/B20
+(или явная маска APPLY-LTE на обновлённой установке), connected/LTE; три значения
 `link=1 address=1 default_route=1`. Маршрут к внешнему IP идёт через текущий
 wwanN без Network unreachable. Это проверка локального IPv4, ещё не Интернета.
 
@@ -138,11 +146,16 @@ RF-crash не нарастает, восстановления LTE не повт
 
 ## 5. Профиль LTE и восстановление доступа
 
-По умолчанию только **B1/B3/B7**. Это обходной профиль по вашему результату,
-а не исправление закрытого радио-кода. В зоне только B8/B20 связи может не быть;
-максимальная скорость не гарантируется. Возвращение всех частот автоматически
-не выполняется до проверки RF-ошибки. Смена списка: `network.modem.allowedbands`;
-формат — имена eutran через `|`. После изменения нужен ifup modem, связь прервётся.
+Новая установка: только 4G, все заявленные LTE-диапазоны, кроме **B7/B20**.
+На наблюдавшемся экземпляре именно эти два выбора дважды вызвали RF-assert.
+Не зарегистрировавшиеся B5/B8/B38–41 сохранены. Это не ремонт закрытой
+радиопрошивки и не сертификация её других сочетаний с NV.
+[Результаты и область применимости](LTE-BANDS-RU.md).
+
+Для существующего модема сначала используйте `live-fix/APPLY.cmd` из исходников
+или `APPLY-LTE/APPLY.cmd` из комплекта исправления. Он совместим с протоколом
+установленной v3.1.5, сохраняет backup, ставит явную маску и имеет резерв B1/B3.
+Простая запись supported-lte в старый netifd не поддерживается.
 
 Отключить только автоматическое восстановление без перезапуска сети:
 

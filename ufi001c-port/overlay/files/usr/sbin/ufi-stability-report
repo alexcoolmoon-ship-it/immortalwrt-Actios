@@ -7,6 +7,14 @@ cat /etc/ufi001c-stability-fix 2>/dev/null
 printf 'boot_id: '; cat /proc/sys/kernel/random/boot_id
 printf 'uptime_seconds: '; cut -d' ' -f1 /proc/uptime
 free
+echo 'Button service (read-only):'
+/usr/sbin/ufi-care status 2>&1 || true
+echo 'LTE firmware/bands (no SIM identity):'
+mmcli --modem=qcom-soc --timeout=10 --output-json 2>/dev/null | jq '
+  .modem.generic | {state, firmware: .["revision"],
+  supported_bands: .["supported-bands"], current_bands: .["current-bands"]}' || true
+printf 'allowedbands: '; uci -q get network.modem.allowedbands || true
+printf 'excludedbands: '; uci -q get network.modem.excludedbands || true
 echo 'LTE kernel state (read-only):'
 /usr/sbin/ufi-lte-health status 2>&1 || true
 ip -4 rule show
