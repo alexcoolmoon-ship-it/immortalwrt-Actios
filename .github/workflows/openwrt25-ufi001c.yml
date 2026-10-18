@@ -60,10 +60,11 @@ jobs:
     timeout-minutes: 240
     env:
       CCACHE_MAXSIZE: 1500M
-      CCACHE_DIR: ${{ runner.temp }}/openwrt/.ccache
     steps:
       - name: Download this port
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Select compiler cache directory
+        run: echo "CCACHE_DIR=$RUNNER_TEMP/openwrt/.ccache" >> "$GITHUB_ENV"
       - name: Install build dependencies
         run: |
           sudo apt-get update
