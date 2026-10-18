@@ -30,6 +30,9 @@ if name == 'mmcli':
            'hardware-revision':'10000','current-bands':bands,'current-modes':'allowed: 4g; preferred: none',
            'supported-bands':bands, 'equipment-identifier':secret, 'device-identifier':secret},
            '3gpp':{'registration-state':'home','imei':secret,'operator-name':secret},'sim':secret}})
+elif name == 'id':
+    assert a == ['-u'], a
+    out = '0'
 elif name == 'uci':
     assert len(a)==3 and a[:2]==['-q','get'], 'UCI mutation forbidden: '+repr(a)
     vals = {'network.modem.allowedmode':'4g','network.modem.allowedbands':s['target'],
@@ -93,7 +96,7 @@ class PostbootCheck(unittest.TestCase):
         self.p=Path(self.temp.name); self.bin=self.p/'bin'; self.bin.mkdir()
         self.root=self.p/'reports'
         self.fake=self.p/'fake.py'; self.fake.write_text(FAKE); self.fake.chmod(0o755)
-        for name in ['mmcli','uci','ubus','ip','curl','dig','dmesg','sleep','sing-box','fake-boot']:
+        for name in ['mmcli','id','uci','ubus','ip','curl','dig','dmesg','sleep','sing-box','fake-boot']:
             (self.bin/name).symlink_to(self.fake)
         self.env=dict(os.environ, TEST_CASE=str(self.p),TEST_ROOT=str(self.root),TEST_SCRIPT=str(SCRIPT),
           UFI_POSTBOOT_SOURCE_ONLY='1', PATH=str(self.bin)+os.pathsep+os.environ['PATH'])
