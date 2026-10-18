@@ -89,7 +89,8 @@ class RuntimeTests(unittest.TestCase):
              patch.object(stock.sys, 'platform', 'win32'), patch.object(stock, 'run_edl') as run:
             stock.EDL(edl_root, self.root / 'log')('rs', 0, 1, self.root / 'out')
             self.assertEqual(run.call_args.args[0][:4],
-                             [str(edl_root / '.venv/Scripts/python.exe'), '-u', str(edl_root / 'edl.py'), 'rs'])
+                             [str((edl_root / '.venv/Scripts/python.exe').resolve()), '-u',
+                              str((edl_root / 'edl.py').resolve()), 'rs'])
 
     def test_usb_precheck_does_not_claim_reset_or_write_any_device(self):
         usb = types.ModuleType('usb'); core = types.ModuleType('usb.core')
