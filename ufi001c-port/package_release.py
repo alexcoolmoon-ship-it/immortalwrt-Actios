@@ -10,17 +10,20 @@ import sys
 PORT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PORT / 'migration'))
 import stock_install
-from check_rootfs import FILES, source_bytes
+from check_rootfs import FILES, FORBIDDEN, source_bytes
 from runtime_manifest import verify_runtime
 
-VERSION = '3.2.0'
+VERSION = '3.2.1-clean'
+PROFILE = 'UFI001C v3.2.1 Clean / OpenWrt 25.12.5'
 
 
 def check_reports(images):
     images = Path(images)
     rootfs = json.loads((images / 'routing-rootfs-check.json').read_text())
-    if rootfs.get('status') != 'passed' or rootfs.get('profile') != 'UFI001C v3.2.0 Final Candidate / OpenWrt 25.12.5':
-        raise ValueError('Missing/wrong v3.2.0 rootfs report')
+    if rootfs.get('status') != 'passed' or rootfs.get('profile') != PROFILE:
+        raise ValueError('Missing/wrong clean rootfs report')
+    if rootfs.get('absent_services') != list(FORBIDDEN):
+        raise ValueError('Missing clean-profile service exclusion check')
     for installed, source in FILES.items():
         actual = hashlib.sha256(source_bytes(source)).hexdigest()
         if rootfs.get('files_sha256', {}).get(installed) != actual:

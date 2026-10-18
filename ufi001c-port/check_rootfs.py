@@ -7,46 +7,47 @@ import sys
 
 PORT = Path(__file__).resolve().parent
 FILES = {
-    'usr/sbin/ufi-care': 'overlay/package/openstick/ufi-care/files/usr/sbin/ufi-care',
     'lib/netifd/proto/modemmanager.sh': 'overlay/package/openstick/modemmanager/files/lib/netifd/proto/modemmanager.sh',
-    'usr/sbin/ufi-lte-health': 'overlay/package/openstick/ufi-lte-health/files/ufi-lte-health',
-    'usr/share/ufi-lte-health/session.jq': 'overlay/package/openstick/ufi-lte-health/files/session.jq',
-    'etc/init.d/ufi-lte-health': 'overlay/package/openstick/ufi-lte-health/files/init',
-    'etc/config/ufi-lte-health': 'overlay/package/openstick/ufi-lte-health/files/config',
     'etc/uci-defaults/99-ufi001c': 'overlay/package/openstick/ufi001c-defaults/files/99-ufi001c',
     'etc/init.d/hotplug-gcreboot': 'overlay/package/openstick/gc/files/hotplug-gcreboot.init',
     'etc/hotplug.d/gcrestart/restart_gc.sh': 'overlay/package/openstick/gc/files/restart_gc.sh',
     'etc/config/gc': 'overlay/package/openstick/gc/files/gc.uci',
-    'usr/sbin/ufi-stability-report': 'overlay/files/usr/sbin/ufi-stability-report',
-    'etc/ufi001c-release': 'overlay/files/etc/ufi001c-release',
-    'usr/bin/podkop': 'overlay/package/openstick/podkop/files/usr/bin/podkop',
-    'usr/lib/podkop/ufi_dns_tunnel.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_dns_tunnel.sh',
-    'usr/lib/podkop/ufi_dns_health.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_dns_health.sh',
-    'etc/init.d/ufi-dns-health': 'overlay/package/openstick/podkop/files/etc/init.d/ufi-dns-health',
+    'etc/ufi001c-release': 'clean/ufi001c-release',
     'etc/init.d/sing-box': 'overlay/package/openstick/podkop-engine/files/sing-box.init',
-    'usr/lib/podkop/ufi_policy_routing.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_policy_routing.sh',
-    'usr/lib/podkop/ufi_startup.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_startup.sh',
-    'usr/lib/podkop/ufi_fakeip_check.sh': 'overlay/package/openstick/podkop/files/usr/lib/ufi_fakeip_check.sh',
-    'www/luci-static/resources/view/podkop/main.js': 'overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js',
-    'www/luci-static/resources/view/podkop/settings.js': 'overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js',
-    'www/luci-static/resources/view/podkop/ufi_sections.js': 'overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/ufi_sections.js',
-    'etc/uci-defaults/99-ufi001c-addons': 'overlay/package/openstick/ufi001c-defaults/files/99-ufi001c-addons',
-    'usr/sbin/apk': 'overlay/package/openstick/ufi-service-proxy/files/apk',
-    'usr/libexec/ufi-service-fetch': 'overlay/package/openstick/ufi-service-proxy/files/fetch',
-    'usr/libexec/ufi-package-bin/wget': 'overlay/package/openstick/ufi-service-proxy/files/wget',
-    'usr/share/ufi-service-proxy/ready.jq': 'overlay/package/openstick/ufi-service-proxy/files/ready.jq',
-    'usr/sbin/ufi-services-check': 'overlay/package/openstick/ufi-service-proxy/files/check',
-    'usr/libexec/package-manager-call': 'feed-overrides/luci/applications/luci-app-package-manager/root/usr/libexec/package-manager-call',
-    'usr/lib/podkop/constants.sh': 'overlay/package/openstick/podkop/files/usr/lib/constants.sh',
-    'usr/lib/podkop/helpers.sh': 'overlay/package/openstick/podkop/files/usr/lib/helpers.sh',
-    'usr/lib/podkop/sing_box_config_manager.sh': 'overlay/package/openstick/podkop/files/usr/lib/sing_box_config_manager.sh',
-    'www/luci-static/resources/view/podkop/podkop.js': 'overlay/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/podkop.js',
+    'etc/uci-defaults/99-ufi001c-addons': 'clean/99-ufi001c-addons',
 }
+# Check every installed upstream Podkop library/UI/ACL, including the version
+# substitutions made by the OpenWrt recipes. Legacy overlays cannot pass here.
+base = PORT / 'clean/package/openstick'
+for package, source_subdir, destination in (
+    ('podkop', 'files/etc', 'etc'),
+    ('podkop', 'files/usr/bin', 'usr/bin'),
+    ('podkop', 'files/usr/lib', 'usr/lib/podkop'),
+    ('luci-app-podkop', 'root', ''),
+    ('luci-app-podkop', 'htdocs', 'www'),
+):
+    folder = base / package / source_subdir
+    for path in folder.rglob('*'):
+        if path.is_file():
+            installed = str(Path(destination) / path.relative_to(folder))
+            FILES[installed] = str(path.relative_to(PORT))
+
+FORBIDDEN = (
+    'usr/sbin/ufi-care', 'etc/init.d/ufi-care',
+    'usr/sbin/ufi-lte-health', 'etc/init.d/ufi-lte-health',
+    'etc/init.d/ufi-dns-health', 'usr/lib/podkop/ufi_dns_health.sh',
+    'usr/lib/podkop/ufi_dns_tunnel.sh', 'usr/lib/podkop/ufi_startup.sh',
+    'usr/sbin/apk', 'usr/libexec/ufi-service-fetch',
+    'usr/libexec/ufi-package-bin', 'usr/sbin/ufi-services-check',
+    'usr/sbin/ufi-stability-report', 'etc/init.d/zapret',
+    'etc/init.d/podkop-engine', 'usr/libexec/podkop-engine/failsafe',
+)
+
 
 
 def source_bytes(source):
     data = (PORT / source).read_bytes()
-    if source.endswith('/constants.sh'):
+    if source.endswith(('/constants.sh', '/main.js')):
         version = json.loads((PORT / 'addons.lock.json').read_text())['podkop']['tag']
         data = data.replace(b'__COMPILED_VERSION_VARIABLE__', version.encode())
     return data
@@ -60,7 +61,10 @@ def verify(root):
         if not path.is_file() or path.read_bytes() != expected:
             raise ValueError('Missing/stale release file in rootfs: ' + installed)
         hashes[installed] = hashlib.sha256(expected).hexdigest()
-    for name in ('ip-full', 'od-coreutils'):
+    for installed in FORBIDDEN:
+        if (root / installed).exists() or (root / installed).is_symlink():
+            raise ValueError('Unwanted service/wrapper in clean rootfs: ' + installed)
+    for name in ('ip-full',):
         binary = root / 'usr/libexec' / name
         if not binary.is_file():
             raise ValueError('Missing routing/DNS tool: ' + str(binary))
@@ -68,7 +72,7 @@ def verify(root):
         if header[:5] != b'\x7fELF\x02' or header[18:20] != b'\xb7\x00':
             raise ValueError('Expected an AArch64 tool: ' + name)
     return {'status': 'passed', 'profile': (root / 'etc/ufi001c-release').read_text().strip(),
-            'files_sha256': hashes, 'tools': ['ip-full', 'od-coreutils'],
+            'files_sha256': hashes, 'tools': ['ip-full'], 'absent_services': list(FORBIDDEN),
             'scope': 'Assembled rootfs contents; no hardware boot test'}
 
 

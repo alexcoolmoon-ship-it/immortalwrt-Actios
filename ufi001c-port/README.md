@@ -1,12 +1,6 @@
-# UFI001C v3.2.0 Final Candidate
+# UFI001C v3.2.1 Clean
 
-Основная инструкция — [README проекта](../README.md).
+[README проекта](../README.md) · [Установка](INSTALL-RU.md) · [Изменения](RELEASE-NOTES-v3.2.1.md)
 
-- [Собрать и скачать](GITHUB-RU.md)
-- [Переход со стока](migration/README-STOCK-RU.md)
-- [Обновить установленный OpenWrt](INSTALL-RU.md)
-- [Изменения](RELEASE-NOTES-v3.2.0.md)
-- [Проверки](VALIDATION-v3.2.0.md)
-
-Источники OpenWrt и дополнений закреплены. Свежий LTE-профиль подтверждён на
-действующей системе; новая скомпилированная версия требует аппаратной приёмки.
+Официальная база OpenWrt 25.12.5, Podkop 0.7.24 с минимальной DNS-правкой.
+Состав чистого профиля находится в clean/ и выбирается prepare_clean.py.

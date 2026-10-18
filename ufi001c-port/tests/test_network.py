@@ -295,7 +295,7 @@ with (root / 'services.log').open('a') as out: out.write(pathlib.Path(__file__).
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_bytes(header)
         self.assertEqual(gate.verify(self.tmp)['status'], 'passed')
-        helper = self.tmp / 'usr/lib/podkop/ufi_policy_routing.sh'
+        helper = self.tmp / 'usr/lib/podkop/sing_box_config_facade.sh'
         saved = helper.read_bytes()
         helper.write_text('# obsolete helper\n')
         with self.assertRaisesRegex(ValueError, 'stale'):

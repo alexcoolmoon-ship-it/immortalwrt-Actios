@@ -1,0 +1,42 @@
+{
+  "source": "https://github.com/itdoginfo/podkop",
+  "tag": "0.7.24",
+  "commit": "da8bd40983aaab4d29614d38c8d6214d0a217e3e",
+  "files_sha256": {
+    "podkop/Makefile": "a41816d6698116fb50985da2a051c7ca20e6e1e6a9f7a152df843c48eaf35b58",
+    "podkop/files/etc/config/podkop": "0cd47998df9efbb3d380e24c585a40f216e4541d0e86ab7d65b404e236652924",
+    "podkop/files/etc/init.d/podkop": "81398850e3481bc6c75f10cc2885529d36b49b0c91c32caf57f54467cbc8cbc2",
+    "podkop/files/usr/bin/podkop": "5d245acb092884a40ed97699e7760b031be7399af8734fa63547b5f31c0d980d",
+    "podkop/files/usr/lib/constants.sh": "e1f559baa0ffdc202fefa78622f6d61887b84505a563f127b5053b4e61c424f6",
+    "podkop/files/usr/lib/helpers.jq": "e1f9a431adc6de14793323eb26303b64380f93c0eda73441261448e74c8940a4",
+    "podkop/files/usr/lib/helpers.sh": "90a05e8ccf97c3198949e8e14af3fb5bf64bc7a82551e905f8b5720d10d20b9e",
+    "podkop/files/usr/lib/logging.sh": "275d2d0564b3564e1cfa716a759182e1e8dbd47c83d13c473f06c2b153bfbfeb",
+    "podkop/files/usr/lib/nft.sh": "960a60628ed0d61bf9d59f1fb9334e72d7baecd3b460c65fe26970227fb5ecf2",
+    "podkop/files/usr/lib/rulesets.sh": "aa9ffcc84ff315c2e2547b047f19247ef097cea8a33c2539b997b3964c65b74e",
+    "podkop/files/usr/lib/sing_box_config_facade.sh": "84ad9d03cbea2499f8da32ec263e4e36cdfd8b7d8461ae16e8c6ac1b1bc857c9",
+    "podkop/files/usr/lib/sing_box_config_manager.sh": "7b4e437ebc9b8fe1d5ebac8fa69555f635affa1890ed4ae6cb7f87649f4ce23c",
+    "luci-app-podkop/Makefile": "16d3b45729e8a4a453900ffe37d5d6ecfb3391ef416a811f5ebd0bdc2d660269",
+    "luci-app-podkop/htdocs/luci-static/resources/view/podkop/dashboard.js": "6a075ab405160ecfe2742cca4ca5ef24af2d7fca2108d05c3fb48541c0e639aa",
+    "luci-app-podkop/htdocs/luci-static/resources/view/podkop/diagnostic.js": "25fcfd513a23bd3203a04d64f201e724de01f8584ee6435940e47c358a349ad2",
+    "luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js": "d17373fc03a209eda27170511e04ecef49428b82c2c5f01a3c5035560f2d4b64",
+    "luci-app-podkop/htdocs/luci-static/resources/view/podkop/podkop.js": "42656145a814a7be5b64d06edeea259b300b00df45e46c6ce48fd8a697d43f78",
+    "luci-app-podkop/htdocs/luci-static/resources/view/podkop/section.js": "70994e3a2fa8b08c171c443f92277cb202250aa67b502641c477787dd7bac706",
+    "luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js": "efdef1014db7f6153045db4703551d39c6006ba69d9737c588705c94985371dc",
+    "luci-app-podkop/msgmerge.sh": "61cf447cdcfaefd9fbbd6ef18eb0acbeea53cdb551b4dd4f9324a03a36ed2060",
+    "luci-app-podkop/po/ru/podkop.po": "fa4b0240e42236c3f56a76de445a60aa6cf2adc2108aae5761f71198fcf6e4fd",
+    "luci-app-podkop/po/templates/podkop.pot": "88410a07b9bfea5086e3f28042bda3b7fdf8d82d8f6d1f5bf94a58b9424db794",
+    "luci-app-podkop/root/etc/uci-defaults/50_luci-podkop": "9bbc10e163839fe1c8a7f57ac4c9f4e4d6fc4c76f67595a4e0f3dfcf54f4dc5a",
+    "luci-app-podkop/root/usr/share/luci/menu.d/luci-app-podkop.json": "e2b27555a35438fd0fd2016dc10c92fdc220d19e94d6e2280cd8173d2cf46e72",
+    "luci-app-podkop/root/usr/share/rpcd/acl.d/luci-app-podkop.json": "e6aac8ec9166a9db3e5a1be0cf4b50ee7de6a99d3340ff40febb86e58ca42503",
+    "luci-app-podkop/xgettext.sh": "699b5fb41741b0be5da110da89e9936a9170ee7baf8049e25ba6ed39dbbbe340"
+  },
+  "modified_sha256": {
+    "podkop/Makefile": "df5233f3da17d5c7f75824e2b02b33b6e528200bf8cb0a41d569b3dad79bb4aa",
+    "podkop/files/etc/config/podkop": "4ead5f8b5a13e0127fbef4d2cfd61b3f63a496f3adffcfabf6bfa6c9405f5535",
+    "podkop/files/usr/bin/podkop": "51da250599abbeaa78e085a7e5e46ed2b1983b050446dace68a10fd1b76d36c2",
+    "podkop/files/usr/lib/sing_box_config_facade.sh": "1a3ce556bfcb6be980292f1af5e322c05ac12236566f9dc3ba01786db2017a01",
+    "podkop/files/usr/lib/sing_box_config_manager.sh": "4c0a055a7ce45aa633a4d517288306435352f2676d2e2be263b401750528bded",
+    "luci-app-podkop/Makefile": "1f7fbbcbedbbbdbce33b039ad8cdaad6c5b3081b432125fa742c649980ea7a10",
+    "luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js": "b51077b00a2ffbd190014ed3aeaddaabd149b333cf8f8c7983ca73bd3049f358"
+  }
+}

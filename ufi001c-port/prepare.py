@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from prepare_engine import prepare as prepare_engine
 from check_radio_source import verify as verify_radio
+from prepare_clean import apply as apply_clean
 
 here = Path(__file__).resolve().parent
 args = argparse.ArgumentParser()
@@ -40,6 +41,7 @@ else:
     run("git", "apply", "--reverse", "--check", patch)
 shutil.copytree(here / "overlay", root, dirs_exist_ok=True)
 prepare_engine(root)
+apply_clean(root)
 shutil.copy2(here / "feeds.conf", root / "feeds.conf")
 shutil.copy2(root / "ufi001c.config", root / ".config")
 # Force package metadata to include the newly added driver definitions.

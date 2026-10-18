@@ -28,7 +28,8 @@ class ReleaseTests(unittest.TestCase):
         fixtures(self.images)
         firmware_metadata(self.images)
         self.report = {
-            'status': 'passed', 'profile': 'UFI001C v3.2.0 Final Candidate / OpenWrt 25.12.5',
+            'status': 'passed', 'profile': package_release.PROFILE,
+            'absent_services': list(package_release.FORBIDDEN),
             'files_sha256': {dest: hashlib.sha256(package_release.source_bytes(source)).hexdigest()
                              for dest, source in package_release.FILES.items()}}
         self.save_report()
@@ -39,13 +40,13 @@ class ReleaseTests(unittest.TestCase):
 
     def test_stale_ui_or_missing_kernel_gate_prevents_packaging(self):
         package_release.check_reports(self.images)
-        self.report['files_sha256']['usr/lib/podkop/ufi_fakeip_check.sh'] = '0' * 64
+        self.report['files_sha256']['usr/lib/podkop/sing_box_config_facade.sh'] = '0' * 64
         self.save_report()
         with self.assertRaisesRegex(ValueError, 'different source'):
             package_release.check_reports(self.images)
         (self.images / 'kernel-routing-check.txt').write_text('FAIL')
-        self.report['files_sha256']['usr/lib/podkop/ufi_fakeip_check.sh'] = hashlib.sha256(
-            (PORT / package_release.FILES['usr/lib/podkop/ufi_fakeip_check.sh']).read_bytes()).hexdigest()
+        self.report['files_sha256']['usr/lib/podkop/sing_box_config_facade.sh'] = hashlib.sha256(
+            (PORT / package_release.FILES['usr/lib/podkop/sing_box_config_facade.sh']).read_bytes()).hexdigest()
         self.save_report()
         with self.assertRaisesRegex(ValueError, 'Kernel policy'):
             package_release.check_reports(self.images)

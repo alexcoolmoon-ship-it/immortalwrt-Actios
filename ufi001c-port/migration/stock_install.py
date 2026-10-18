@@ -34,7 +34,7 @@ from edl_watchdog import run_edl, EDLError
 from chunk_backup import full_backup, read_range, exclusive
 from radio_report import summarize as summarize_radio
 
-VERSION = '3.2.0-rc1'
+VERSION = '3.2.1-clean'
 SECTOR = 512
 GIB = 1024**3
 NV = ('modemst1', 'modemst2', 'fsg', 'fsc', 'sec')
@@ -48,7 +48,7 @@ LIMITS = {'boot.img': 64*1024**2, 'system.img': GIB,
           'validation.json': 65536, 'release-info.json': 16384,
           'INSTALL-RU.md': 65536, 'VALIDATION-v3.1.2.md': 65536,
           'VALIDATION-v3.1.3.md': 65536, 'VALIDATION-v3.1.4.md': 65536, 'VALIDATION-v3.1.5.md': 65536, 'VALIDATION-v3.1.6.md': 65536,
-          'VALIDATION-v3.2.0.md': 65536}
+          'VALIDATION-v3.2.0.md': 65536, 'VALIDATION-v3.2.1.md': 65536}
 
 
 def digest_bytes(data):

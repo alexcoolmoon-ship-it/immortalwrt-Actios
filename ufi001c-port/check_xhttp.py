@@ -58,7 +58,7 @@ def verify(binary, command, output):
         queries['mode'] = 'packet-up'
         queries['extra'] = json.dumps({
             'uplinkHTTPMethod': 'POST', 'uplinkDataPlacement': 'header',
-            'uplinkDataKey': 'X-Data', 'sessionIDPlacement': 'header',
+            'uplinkDataKey': 'x-edge-data', 'uplinkChunkSize': 4000, 'sessionIDPlacement': 'header',
             'sessionIDKey': 'X-Session', 'seqPlacement': 'header',
             'seqKey': 'X-Seq', 'xmux': {'maxConnections': 2}}, separators=(',', ':'))
         link = ('vless://11111111-1111-4111-8111-111111111111@127.0.0.1:443?'
@@ -66,7 +66,8 @@ def verify(binary, command, output):
         outbound = json.loads(run('tools', 'decode-link', '--compact', link))
         transport = outbound['transport']
         if (transport.get('uplink_data_placement') != 'header'
-                or transport.get('uplink_data_key') != 'X-Data'
+                or transport.get('uplink_data_key') != 'x-edge-data'
+                or transport.get('uplink_chunk_size') != 4000
                 or str(transport.get('xmux', {}).get('max_connections')) != '2'):
             raise ValueError('XHTTP extra/XMUX options lost in decode-link')
         outbound['tag'] = 'probe'

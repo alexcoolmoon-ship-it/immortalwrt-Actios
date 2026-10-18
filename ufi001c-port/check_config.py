@@ -25,23 +25,14 @@ required = [
     "PACKAGE_qrtr-ns",
     "PACKAGE_gc",
     "PACKAGE_ufi001c-defaults",
-    "PACKAGE_ufi-care",
-    "PACKAGE_ufi-lte-health",
     "PACKAGE_podkop",
-    "PACKAGE_ufi-service-proxy",
     "PACKAGE_luci-app-podkop",
     "PACKAGE_luci-i18n-podkop-ru",
     "PACKAGE_podkop-engine",
-    "PACKAGE_zapret-ufi",
     "PACKAGE_qmi-utils",
     "PACKAGE_kmod-nft-tproxy",
     "PACKAGE_kmod-nft-socket",
-    "PACKAGE_kmod-nft-queue",
-    "PACKAGE_kmod-nfnetlink-queue",
-    "PACKAGE_kmod-tun",
-    "PACKAGE_kmod-inet-diag",
     "PACKAGE_ip-full",
-    "PACKAGE_coreutils-od",
 ]
 missing = [name for name in required if f"CONFIG_{name}=y\n" not in text]
 if missing:
@@ -52,7 +43,8 @@ if cache_dir != '""':
     raise SystemExit("CCACHE_DIR must be empty: CI caches the OpenWrt .ccache directory")
 if "CONFIG_TARGET_ROOTFS_SQUASHFS=y\n" in text:
     raise SystemExit("This first port requires ext4, not squashfs")
-for package in ('sing-box', 'sing-box-tiny', 'podkop-engine-full'):
+for package in ('sing-box', 'sing-box-tiny', 'podkop-engine-full',
+                'ufi-care', 'ufi-lte-health', 'ufi-service-proxy', 'zapret-ufi'):
     if f'CONFIG_PACKAGE_{package}=y\n' in text:
-        raise SystemExit('Unexpected second engine provider: ' + package)
+        raise SystemExit('Unexpected package in clean profile: ' + package)
 print("UFI001C configuration checks passed")

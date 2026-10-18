@@ -115,7 +115,7 @@ apk_out = out / "same-build-apks"
 apk_out.mkdir(exist_ok=True)
 prefixes = ("kmod-nft-tproxy-", "kmod-nft-socket-", "kmod-nft-queue-",
             "kmod-nfnetlink-queue-", "kmod-tun-", "kmod-inet-diag-",
-            "ufi-care-", "podkop-", "luci-app-podkop-", "zapret-ufi-")
+            "podkop-", "luci-app-podkop-")
 for apk in (root / "bin").rglob("*.apk"):
     if apk.name.startswith(prefixes):
         shutil.copy2(apk, apk_out / apk.name)
