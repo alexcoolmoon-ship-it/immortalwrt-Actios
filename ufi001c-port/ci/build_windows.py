@@ -9,11 +9,13 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
 import zipfile
+from urllib.parse import quote
+from urllib.request import urlopen
 
 PORT = Path(__file__).resolve().parents[1]
 MIGRATION = PORT / 'migration'
@@ -26,7 +28,7 @@ def run(args, cwd=None, quiet=False):
                           stdout=subprocess.DEVNULL if quiet else None)
 
 
-def checkout(url, commit, folder, paths=None):
+def checkout(url, commit, folder):
     if folder.exists():
         raise ValueError('Use a new empty work directory: ' + str(folder))
     folder.mkdir(parents=True)
@@ -38,18 +40,35 @@ def checkout(url, commit, folder, paths=None):
     actual = subprocess.check_output(['git', 'rev-parse', 'FETCH_HEAD'], cwd=folder, text=True).strip()
     if actual != commit:
         raise ValueError('Fetched a different source revision')
-    if paths:
-        run(['git', 'checkout', commit, '--', *paths], folder)
-    else:
-        run(['git', 'checkout', '--detach', commit], folder, quiet=True)
+    run(['git', 'checkout', '--detach', commit], folder, quiet=True)
+
+
+def export_loaders(lock, destination):
+    # Windows Git can fail to hydrate blobs during a path-only checkout from an
+    # unborn partial clone. Fetch only the locked 4 MB subset, with no full DB.
+    if lock['repository'].rstrip('/').removesuffix('.git') != 'https://github.com/bkerler/Loaders':
+        raise ValueError('Unexpected loader repository')
+    commit = lock['commit']
+    if len(commit) != 40 or any(c not in '0123456789abcdef' for c in commit):
+        raise ValueError('Loader revision must be an exact Git SHA')
+    for name, expected in lock['files'].items():
+        path = PurePosixPath(name)
+        if path.is_absolute() or '..' in path.parts or '\\' in name:
+            raise ValueError('Invalid loader path')
+        url = 'https://raw.githubusercontent.com/bkerler/Loaders/' + commit + '/' + quote(name, safe='/')
+        with urlopen(url, timeout=30) as response:
+            data = response.read(expected['bytes'] + 1)
+        if len(data) != expected['bytes'] or hashlib.sha256(data).hexdigest() != expected['sha256']:
+            raise ValueError('Loader checksum mismatch: ' + name)
+        out = destination / name
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(data)
+    print('LOCKED_MSM8916_LOADERS_VERIFIED (' + str(len(lock['files'])) + ')')
 
 
 def prepare(work, lock):
     edl = work / 'edl-source'
-    loaders = work / 'loaders-source'
     checkout(lock['edl']['repository'], lock['edl']['commit'], edl)
-    checkout(lock['loaders']['repository'], lock['loaders']['commit'], loaders,
-             [*lock['loaders']['files'], 'README.md'])
     for key, name in [('requirements_sha256', 'requirements.txt'), ('uv_lock_sha256', 'uv.lock'),
                       ('entry_sha256', 'edl.py'), ('windows_dll_sha256', 'edlclient/Windows/libusb-1.0.dll'),
                       ('zadig_sha256', 'Drivers/Windows/zadig-2.8.exe')]:
@@ -57,13 +76,7 @@ def prepare(work, lock):
             raise ValueError('EDL source checksum mismatch: ' + name)
     destination = edl / 'Loaders'
     destination.mkdir(exist_ok=True)
-    for name, expected in lock['loaders']['files'].items():
-        path = loaders / name
-        if path.stat().st_size != expected['bytes'] or digest(path) != expected['sha256']:
-            raise ValueError('Loader checksum mismatch: ' + name)
-        out = destination / name
-        out.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(path, out)
+    export_loaders(lock['loaders'], destination)
     requirements = work / 'edl-requirements.lock.txt'
     # pylzma is a stale pyproject dependency, absent from requirements.txt and
     # not imported by this pinned EDL tree. Keep all other locked dependencies.
