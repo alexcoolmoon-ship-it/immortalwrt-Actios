@@ -616,7 +616,9 @@ def bundle(args):
         update.prepare_images(images, prepared)
         building=work/'bundle.zip'
         with zipfile.ZipFile(building, 'x', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
-            prefix='UFI001C-USB/'
+            # The top-level folder already has the final name: unzip once and
+            # run INSTALL.cmd, no renaming or moving files around.
+            prefix=f'UFI001C-{VERSION}/'
             for name in PACKAGE_FILES: archive.write(HERE/name, prefix+name)
             for path in sorted((HERE/'stock-base').iterdir()):
                 if path.is_file(): archive.write(path, prefix+'stock-base/'+path.name)
@@ -777,7 +779,27 @@ def main():
             print('\nSTOP: ' + str(exc) + '\nЭта операция не выполняет запись на модем. '
                   'Сохраните исходный бэкап.', file=sys.stderr)
             return 1
-        print('\nSTOP: '+str(exc)+'\nЕсли запись уже начиналась, сохраните EDL и используйте RESTORE.cmd.\n'
+        # EDL failures write edl-failure.json next to edl.log; show its tail so
+        # the reason is visible without digging through the backup folder.
+        edl_hint = ''
+        try:
+            backups = Path(args.backups)
+            if backups.is_dir():
+                candidates = sorted(backups.rglob('edl-failure.json'),
+                                    key=lambda p: p.stat().st_mtime, reverse=True)
+                if candidates:
+                    rep = json.loads(candidates[0].read_text(encoding='utf-8'))
+                    tail = rep.get('output_tail', '') or ''
+                    reason = rep.get('reason', '')
+                    usb_err = rep.get('usb_error', '') or ''
+                    edl_hint = '\nEDL: ' + str(reason)
+                    if usb_err:
+                        edl_hint += '\n' + usb_err
+                    if tail.strip():
+                        edl_hint += '\n--- хвост вывода EDL ---\n' + tail.strip()[-1500:] + '\n--- конец ---\n'
+        except Exception:
+            pass
+        print('\nSTOP: '+str(exc)+edl_hint+'\nЕсли запись уже начиналась, сохраните EDL и используйте RESTORE.cmd.\n'
               'Бэкапы находятся в '+str(args.backups)+'. Не удаляйте их.', file=sys.stderr)
         return 1
     except KeyboardInterrupt:

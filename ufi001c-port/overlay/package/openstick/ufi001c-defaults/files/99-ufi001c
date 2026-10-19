@@ -5,8 +5,7 @@
 # A preserved modem section belongs to the installed system. Do not reset its
 # LAN/Wi-Fi/APN while installing new defaults. Migrate its LTE policy separately.
 [ -z "$(uci -q get network.modem)" ] || exit 0
-[ -s /etc/ufi001c-wifi-key ] || exit 1
-wifi_key="$(cat /etc/ufi001c-wifi-key)"
+# Wi-Fi is intentionally open (no password) on this build.
 
 uci -q batch <<EOF
 set network.br_lan=device
@@ -40,8 +39,8 @@ set wireless.default_radio0.device='radio0'
 set wireless.default_radio0.network='lan'
 set wireless.default_radio0.mode='ap'
 set wireless.default_radio0.ssid='OpenWrt-25-UFI001C'
-set wireless.default_radio0.encryption='psk2'
-set wireless.default_radio0.key='$wifi_key'
+set wireless.default_radio0.encryption='none'
+delete wireless.default_radio0.key
 set luci.main.lang='ru'
 set system.@system[0].hostname='OpenWrt-UFI001C'
 commit network

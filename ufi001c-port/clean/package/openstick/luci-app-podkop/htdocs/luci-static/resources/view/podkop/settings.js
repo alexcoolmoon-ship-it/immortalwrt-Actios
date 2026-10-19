@@ -125,6 +125,19 @@ function createSettingsContent(section, singBoxFeatures = []) {
   };
 
   o = section.option(
+    form.ListValue,
+    "ufi_bootstrap_transport",
+    _("Bootstrap transport"),
+    _(
+      "Protocol used for the Yandex bootstrap DNS (77.88.8.8). The diagnostic check probes the selected protocol.",
+    ),
+  );
+  o.value("tcp", _("TCP (default)"));
+  o.value("udp", _("UDP"));
+  o.default = "tcp";
+  o.rmempty = false;
+
+  o = section.option(
     form.Value,
     "dns_rewrite_ttl",
     _("DNS Rewrite TTL"),

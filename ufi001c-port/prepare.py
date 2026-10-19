@@ -2,7 +2,6 @@
 """Prepare a pinned OpenWrt 25.12.5 tree with the UFI001C port."""
 import argparse
 import json
-import secrets
 import shutil
 import subprocess
 from pathlib import Path
@@ -47,14 +46,9 @@ shutil.copy2(root / "ufi001c.config", root / ".config")
 # Force package metadata to include the newly added driver definitions.
 for file in ("package/kernel/linux/Makefile", "package/kernel/mac80211/Makefile"):
     (root / file).touch()
-keyfile = root / "files/etc/ufi001c-wifi-key"
-keyfile.parent.mkdir(parents=True, exist_ok=True)
-if not keyfile.exists():
-    keyfile.write_text(secrets.token_hex(10) + "\n")
-keyfile.chmod(0o600)
 (root / "ACCESS.txt").write_text(
     "Wi-Fi: OpenWrt-25-UFI001C\n"
-    f"Wi-Fi password: {keyfile.read_text().strip()}\n"
+    "Wi-Fi password: none (open network)\n"
     "LuCI: http://192.168.1.1/\n"
     "Username: root\n"
     "Initial administrator password: empty; set it after signing in.\n"

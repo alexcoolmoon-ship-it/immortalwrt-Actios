@@ -1190,3 +1190,12 @@ msgstr ""
 
 msgid "Cloudflare check could not complete. Check that Podkop is running and try again."
 msgstr ""
+
+msgid "Bootstrap transport"
+msgstr ""
+
+msgid "Protocol used for the Yandex bootstrap DNS (77.88.8.8). The diagnostic check probes the selected protocol."
+msgstr ""
+
+msgid "TCP (default)"
+msgstr ""

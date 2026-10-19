@@ -859,3 +859,12 @@ msgstr "Cloudflare не ответил через прокси. Проверьт
 
 msgid "Cloudflare check could not complete. Check that Podkop is running and try again."
 msgstr "Не удалось завершить проверку Cloudflare. Проверьте, что Podkop запущен, и повторите проверку."
+
+msgid "Bootstrap transport"
+msgstr "Транспорт bootstrap"
+
+msgid "Protocol used for the Yandex bootstrap DNS (77.88.8.8). The diagnostic check probes the selected protocol."
+msgstr "Протокол для Yandex bootstrap DNS (77.88.8.8). Диагностика проверяет выбранный протокол."
+
+msgid "TCP (default)"
+msgstr "TCP (по умолчанию)"

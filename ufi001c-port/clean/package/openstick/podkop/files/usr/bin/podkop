@@ -140,6 +140,25 @@ foreach_configured_section() {
     config_foreach configured_section_handler section "$1"
 }
 
+# BusyBox ntpd -q has no built-in timeout: with unreachable servers it hangs
+# forever and blocks start_main. Run it in the background and wait at most
+# 30 s (pure shell, no extra packages), then kill it and continue anyway.
+sync_time_ntp() {
+    /usr/sbin/ntpd -q -p 194.190.168.1 -p 216.239.35.0 -p 216.239.35.4 -p 162.159.200.1 -p 162.159.200.123 &
+    local ntp_pid=$! waited=0
+    while kill -0 "$ntp_pid" 2>/dev/null; do
+        [ "$waited" -lt 30 ] || break
+        sleep 1
+        waited=$((waited + 1))
+    done
+    if kill -0 "$ntp_pid" 2>/dev/null; then
+        kill "$ntp_pid" 2>/dev/null
+        wait "$ntp_pid" 2>/dev/null
+        log "ntpd -q timed out after 30s; continuing without time sync" "warn"
+    fi
+    return 0
+}
+
 start_main() {
     log "Starting podkop"
 
@@ -157,7 +176,7 @@ start_main() {
     [ "$cloudflare_enabled" != 1 ] || dns_type=tcp
     case "$dns_type" in
     doh|dot)
-        /usr/sbin/ntpd -q -p 194.190.168.1 -p 216.239.35.0 -p 216.239.35.4 -p 162.159.200.1 -p 162.159.200.123
+        sync_time_ntp
         ;;
     esac
 
@@ -843,13 +862,20 @@ sing_box_configure_dns() {
     config_get dns_type "settings" "dns_type" "doh"
     config_get dns_server "settings" "dns_server" "1.1.1.1"
     config_get bootstrap_dns_server "settings" "bootstrap_dns_server" "77.88.8.8"
+    local ufi_bootstrap_transport
+    config_get ufi_bootstrap_transport "settings" "ufi_bootstrap_transport" "tcp"
+    case "$ufi_bootstrap_transport" in tcp|udp) ;; *) ufi_bootstrap_transport=tcp ;; esac
 
     dns_server_address="$(url_get_host "$dns_server")"
     if ! is_ipv4 "$dns_server_address"; then
         dns_domain_resolver=$SB_BOOTSTRAP_SERVER_TAG
     fi
 
-    config=$(sing_box_cm_add_tcp_dns_server "$config" "$SB_BOOTSTRAP_SERVER_TAG" "$bootstrap_dns_server" 53)
+    if [ "$ufi_bootstrap_transport" = udp ]; then
+        config=$(sing_box_cm_add_udp_dns_server "$config" "$SB_BOOTSTRAP_SERVER_TAG" "$bootstrap_dns_server" 53)
+    else
+        config=$(sing_box_cm_add_tcp_dns_server "$config" "$SB_BOOTSTRAP_SERVER_TAG" "$bootstrap_dns_server" 53)
+    fi
     config=$(sing_box_cf_add_dns_server "$config" "$dns_type" "$SB_DNS_SERVER_TAG" "$dns_server" "$dns_domain_resolver")
     config=$(sing_box_cm_add_fakeip_dns_server "$config" "$SB_FAKEIP_DNS_SERVER_TAG" "$SB_FAKEIP_INET4_RANGE")
 
@@ -2130,9 +2156,14 @@ check_dns_available() {
         dns_on_router=1
     fi
 
-    # Check bootstrap DNS server
+    # Check bootstrap DNS server using the configured transport (Codex plan:
+    # the diagnostic must probe the selected protocol, not hardcoded TCP).
     if [ -n "$bootstrap_dns_server" ]; then
-        if dns_query_ok @"$bootstrap_dns_server" "$domain" A +tcp +timeout=4 +tries=1; then
+        local ufi_bootstrap_transport proto_flag
+        config_get ufi_bootstrap_transport "settings" "ufi_bootstrap_transport" "tcp"
+        case "$ufi_bootstrap_transport" in tcp|udp) ;; *) ufi_bootstrap_transport=tcp ;; esac
+        if [ "$ufi_bootstrap_transport" = udp ]; then proto_flag="+notcp"; else proto_flag="+tcp"; fi
+        if dns_query_ok @"$bootstrap_dns_server" "$domain" A "$proto_flag" +timeout=4 +tries=1; then
             bootstrap_dns_status=1
         fi
     fi
@@ -2307,7 +2338,41 @@ check_sing_box() {
 }
 
 check_fakeip() {
-    curl -m 3 -s "https://$FAKEIP_TEST_DOMAIN/check" | jq .
+    # Superset JSON for both LuCI frontends. The upstream 3-check UI reads
+    # top-level fakeip/IP; a stale cached UFI 6-check UI reads version:1 and
+    # the local_* fields. Always valid JSON, even if the test server is down.
+    local domain=fakeip.podkop.fyi answer='' router_answer=''
+    local local_ok=false router_ok=false route_ok=false
+    local ext_ok=false ext_fakeip=false ext_ip="" ext_status=unavailable
+    local response
+    answer=$(dig +time=2 +tries=1 +short @127.0.0.42 "$domain" A 2>/dev/null \
+        | awk -F. 'NF==4 && $1==198 && ($2==18 || $2==19) {
+            v=1; for(i=1;i<=4;i++) if($i !~ /^[0-9]+$/ || $i+0>255) v=0
+            if(v){print; exit}}') || answer=''
+    router_answer=$(dig +time=2 +tries=1 +short @127.0.0.1 "$domain" A 2>/dev/null \
+        | awk -F. 'NF==4 && $1==198 && ($2==18 || $2==19) {
+            v=1; for(i=1;i<=4;i++) if($i !~ /^[0-9]+$/ || $i+0>255) v=0
+            if(v){print; exit}}') || router_answer=''
+    [ -z "$answer" ] || local_ok=true
+    [ -z "$router_answer" ] || router_ok=true
+    if ip -4 rule show 2>/dev/null | grep -Eq 'fwmark 0x100000/0x100000.*lookup 105|lookup 105.*fwmark 0x100000/0x100000' \
+       && ip -4 route show table 105 2>/dev/null | grep -Eq '^local (default|0\.0\.0\.0/0) dev lo( |$)'; then
+        route_ok=true
+    fi
+    response=$(curl --noproxy '*' --connect-timeout 2 --max-time 4 -fsS "https://$domain/check" 2>/dev/null) || response=''
+    if printf '%s' "$response" | jq -e 'type=="object" and (.fakeip|type=="boolean")' >/dev/null 2>&1; then
+        ext_ok=true; ext_status=completed
+        ext_fakeip=$(printf '%s' "$response" | jq -r '.fakeip')
+        ext_ip=$(printf '%s' "$response" | jq -r '.IP // ""')
+    fi
+    jq -n --argjson local_fakeip "$local_ok" --argjson dnsmasq_fakeip "$router_ok" \
+        --argjson policy_route "$route_ok" --arg singbox_answer "$answer" \
+        --arg router_answer "$router_answer" --argjson external_available "$ext_ok" \
+        --arg external_status "$ext_status" --argjson fakeip "$ext_fakeip" --arg ip "$ext_ip" \
+        '{version:1, local_fakeip:$local_fakeip, dnsmasq_fakeip:$dnsmasq_fakeip,
+          policy_route:$policy_route, singbox_answer:$singbox_answer,
+          router_answer:$router_answer, external_available:$external_available,
+          external_status:$external_status, fakeip:$fakeip, IP:$ip}'
 }
 
 #######################################
