@@ -2,10 +2,12 @@
 package fastboot
 
 import (
-	"encoding/binary"
 	"fmt"
 	"io"
+	"math/bits"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,8 +30,8 @@ type Device struct {
 	dev   *gousb.Device
 	cfg   *gousb.Config
 	iface *gousb.Interface
-	inEP  *gousb.InEndpoint
-	outEP *gousb.OutEndpoint
+	inEP  io.Reader
+	outEP io.Writer
 }
 
 // Open 扫描 USB 总线，找到第一个 Fastboot 设备并打开
@@ -179,13 +181,17 @@ func (d *Device) Erase(partition string) error {
 
 // Flash 刷写分区，支持进度回调
 func (d *Device) Flash(partition string, data []byte, progress func(sent, total int)) error {
+	if len(data) == 0 || uint64(len(data)) > uint64(^uint32(0)) {
+		return fmt.Errorf("invalid fastboot download size: %d", len(data))
+	}
 	// 1. 告诉设备准备接收多少字节
 	resp, err := d.Command(fmt.Sprintf("download:%08x", len(data)))
 	if err != nil {
 		return err
 	}
-	if !strings.HasPrefix(resp, "DATA") {
-		return fmt.Errorf("download 命令失败：%s", resp)
+	size, sizeErr := dataResponseSize(resp)
+	if sizeErr != nil || size != uint32(len(data)) {
+		return fmt.Errorf("download size mismatch: %q", resp)
 	}
 
 	// 2. 分块发送数据
@@ -199,6 +205,9 @@ func (d *Device) Flash(partition string, data []byte, progress func(sent, total 
 		n, err := d.outEP.Write(data[sent:end])
 		if err != nil {
 			return fmt.Errorf("数据传输失败（offset %d）：%w", sent, err)
+		}
+		if n <= 0 || n > end-sent {
+			return fmt.Errorf("data transfer made no progress: %w", io.ErrShortWrite)
 		}
 		sent += n
 		if progress != nil {
@@ -235,99 +244,118 @@ func (d *Device) FlashFile(partition, path string, progress func(sent, total int
 	return d.Flash(partition, data, progress)
 }
 
-// FlashFileSparse 大文件分块刷写（用于 system.img，支持 -S 200m）
+// FlashFileSparse sends valid Android sparse fragments with explicit block
+// offsets. Repeated raw flash commands would overwrite the partition's start.
 func (d *Device) FlashFileSparse(partition, path string, chunkSize int, progress func(sent, total int)) error {
 	f, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("读取文件失败 %s：%w", path, err)
+		return fmt.Errorf("open image %s: %w", path, err)
 	}
 	defer f.Close()
-
-	info, _ := f.Stat()
-	total := int(info.Size())
-	sent := 0
-
-	buf := make([]byte, chunkSize)
-	for {
-		n, err := io.ReadFull(f, buf)
-		if n == 0 {
-			break
-		}
-		chunk := buf[:n]
-		if flashErr := d.Flash(partition, chunk, func(s, t int) {
-			if progress != nil {
-				progress(sent+s, total)
-			}
-		}); flashErr != nil {
-			return flashErr
-		}
-		sent += n
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
+	plan, err := readSparsePlan(f, chunkSize)
+	if err != nil {
+		return err
 	}
-	return nil
+	err = plan.flash(f, chunkSize, func(fragment []byte, start, length int64) error {
+		return d.Flash(partition, fragment, func(sent, total int) {
+			if progress != nil {
+				high, low := bits.Mul64(uint64(sent), uint64(length))
+				done, _ := bits.Div64(high, low, uint64(total))
+				progress(int(start+int64(done)), int(plan.byteSize()))
+			}
+		})
+	})
+	if err == nil && progress != nil {
+		progress(int(plan.byteSize()), int(plan.byteSize()))
+	}
+	return err
 }
 
-// OEMDump 备份分区（fastboot oem dump + get_staged）
+// OEMDump publishes a private backup only after the declared number of bytes
+// and the final OKAY have arrived. get_staged is a CLI name; its wire command
+// is upload, as in the AOSP Fastboot driver.
 func (d *Device) OEMDump(partition, outFile string) error {
-	// oem dump <partition>
+	lock, err := os.OpenFile(outFile+".lock", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	defer func() { lock.Close(); os.Remove(outFile + ".lock") }()
+	if _, err := os.Lstat(outFile); !os.IsNotExist(err) {
+		return fmt.Errorf("backup destination already exists or is inaccessible: %s", outFile)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(outFile), "."+filepath.Base(outFile)+".*.partial")
+	if err != nil {
+		return err
+	}
+	defer func() { tmp.Close(); os.Remove(tmp.Name()) }()
 	resp, err := d.Command("oem dump " + partition)
 	if err != nil {
-		return fmt.Errorf("oem dump %s 失败：%w", partition, err)
+		return fmt.Errorf("oem dump %s: %w", partition, err)
 	}
-	if strings.Contains(resp, "FAIL") {
-		return fmt.Errorf("oem dump %s 被拒绝：%s", partition, resp)
+	if !strings.HasPrefix(resp, "OKAY") {
+		return fmt.Errorf("oem dump not acknowledged: %q", resp)
 	}
-
-	// get_staged → 读取数据
-	if err := d.send([]byte("get_staged")); err != nil {
-		return fmt.Errorf("get_staged 发送失败：%w", err)
-	}
-
-	// 先读 DATA:<size>
-	header := make([]byte, 64)
-	n, err := d.inEP.Read(header)
+	resp, err = d.Command("upload")
 	if err != nil {
-		return fmt.Errorf("get_staged 读取头部失败：%w", err)
+		return fmt.Errorf("upload header: %w", err)
 	}
-	headerStr := strings.TrimSpace(string(header[:n]))
-	if !strings.HasPrefix(headerStr, "DATA") {
-		return fmt.Errorf("get_staged 响应异常：%s", headerStr)
+	size, err := dataResponseSize(resp)
+	if err != nil || size == 0 {
+		return fmt.Errorf("invalid upload size response: %q", resp)
 	}
-
-	// 解析大小
-	var size uint32
-	fmt.Sscanf(headerStr[4:], "%x", &size)
-	if size == 0 {
-		return fmt.Errorf("get_staged 返回大小为0，分区可能为空")
-	}
-
-	// 读取数据
-	data := make([]byte, size)
-	totalRead := 0
-	for totalRead < int(size) {
-		n, err := d.inEP.Read(data[totalRead:])
-		totalRead += n
-		if err != nil && err != io.EOF {
-			return fmt.Errorf("get_staged 读取数据失败：%w", err)
+	buf := make([]byte, maxPacket)
+	var received uint64
+	for received < uint64(size) {
+		limit := uint64(len(buf))
+		if left := uint64(size) - received; left < limit {
+			limit = left
 		}
-		if err == io.EOF {
-			break
+		n, readErr := d.inEP.Read(buf[:int(limit)])
+		if n < 0 || n > int(limit) {
+			return fmt.Errorf("invalid upload read count: %d", n)
+		}
+		if n > 0 {
+			written, writeErr := tmp.Write(buf[:n])
+			if writeErr != nil {
+				return writeErr
+			}
+			if written != n {
+				return io.ErrShortWrite
+			}
+			received += uint64(n)
+		}
+		if readErr != nil {
+			return fmt.Errorf("upload interrupted after %d/%d bytes: %w", received, size, readErr)
+		}
+		if n == 0 {
+			return io.ErrNoProgress
 		}
 	}
-
-	// 读 OKAY
-	_, _ = d.readResponse()
-
-	// 写文件
-	if err := os.WriteFile(outFile, data[:totalRead], 0644); err != nil {
-		return fmt.Errorf("写入备份文件失败：%w", err)
+	resp, err = d.readResponse()
+	if err != nil {
+		return fmt.Errorf("upload completion: %w", err)
 	}
-	return nil
+	if !strings.HasPrefix(resp, "OKAY") {
+		return fmt.Errorf("upload not acknowledged: %q", resp)
+	}
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if _, err := os.Lstat(outFile); !os.IsNotExist(err) {
+		return fmt.Errorf("backup destination appeared during upload: %s", outFile)
+	}
+	return os.Rename(tmp.Name(), outFile)
+}
+
+func dataResponseSize(resp string) (uint32, error) {
+	if len(resp) != 12 || !strings.HasPrefix(resp, "DATA") {
+		return 0, fmt.Errorf("invalid DATA response: %q", resp)
+	}
+	size, err := strconv.ParseUint(resp[4:], 16, 32)
+	return uint32(size), err
 }
 
 // Reboot 重启设备
@@ -347,7 +375,10 @@ func (d *Device) RebootBootloader() error {
 // ── 内部方法 ──────────────────────────────────────────────────────────────────
 
 func (d *Device) send(data []byte) error {
-	_, err := d.outEP.Write(data)
+	n, err := d.outEP.Write(data)
+	if err == nil && n != len(data) {
+		return io.ErrShortWrite
+	}
 	return err
 }
 
@@ -360,15 +391,10 @@ func (d *Device) readResponse() (string, error) {
 		buf := make([]byte, 64)
 		n, err := d.inEP.Read(buf)
 		if err != nil {
-			if err == io.EOF {
-				time.Sleep(10 * time.Millisecond)
-				continue
-			}
 			return "", fmt.Errorf("读取响应失败：%w", err)
 		}
 		if n < 4 {
-			time.Sleep(10 * time.Millisecond)
-			continue
+			return "", fmt.Errorf("short fastboot response: %d bytes", n)
 		}
 		resp := string(buf[:n])
 		tag := resp[:4]
@@ -384,7 +410,7 @@ func (d *Device) readResponse() (string, error) {
 			// INFO 是设备打印的日志，继续读直到 OKAY/FAIL
 			continue
 		default:
-			time.Sleep(10 * time.Millisecond)
+			return "", fmt.Errorf("unknown fastboot response: %q", resp)
 		}
 	}
 	return "", fmt.Errorf("等待响应超时（%v）", timeout)
@@ -403,29 +429,17 @@ func WaitForDevice(waitSec int) (*Device, error) {
 	return nil, fmt.Errorf("等待设备超时（%d秒）", waitSec)
 }
 
-// SparseImageSize 读取 sparse image 的实际大小（用于进度显示）
+// SparseImageSize returns the validated logical image size. blk_sz is at
+// offset 12 in the Android sparse header, not offset 8 (the header sizes).
 func SparseImageSize(path string) (int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return 0, err
 	}
 	defer f.Close()
-
-	// sparse image magic: 0xed26ff3a
-	magic := make([]byte, 4)
-	if _, err := f.Read(magic); err != nil {
+	plan, err := readSparsePlan(f, 200*1024*1024)
+	if err != nil {
 		return 0, err
 	}
-	if binary.LittleEndian.Uint32(magic) == 0xed26ff3a {
-		// 读 total_blks (offset 16) 和 blk_sz (offset 8)
-		header := make([]byte, 28)
-		f.Seek(0, 0)
-		f.Read(header)
-		blkSz := binary.LittleEndian.Uint32(header[8:12])
-		totalBlks := binary.LittleEndian.Uint32(header[16:20])
-		return int64(blkSz) * int64(totalBlks), nil
-	}
-
-	info, _ := f.Stat()
-	return info.Size(), nil
+	return plan.byteSize(), nil
 }

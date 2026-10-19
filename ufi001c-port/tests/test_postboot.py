@@ -38,6 +38,7 @@ elif name == 'uci':
     vals = {'network.modem.allowedmode':'4g','network.modem.allowedbands':s['target'],
       'network.modem.auto':'1','network.modem.autoconnect':'1','network.modem.defaultroute':'1',
       'podkop.settings.config_path':'/tmp/'+secret+'.json',
+      'podkop.settings.ufi_bootstrap_transport':s.get('transport','tcp'),
       'podkop.settings.cloudflare_dns_patch':'1' if mode.startswith('clean_cloudflare') else '0'}
     out = vals.get(a[2], ''); rc = 0 if a[2] in vals else 1
 elif name == 'ubus':
@@ -67,7 +68,10 @@ elif name == 'curl':
     Path(a[a.index('-o')+1]).write_text(json.dumps(body))
 elif name == 'dig':
     if mode.startswith('clean') and a[:3]==['@77.88.8.8','example.com','A']:
-        assert '+tcp' in a and '+answer' in a
+        if s.get('transport','tcp')=='tcp':
+            assert '+tcp' in a and '+answer' in a
+        else:
+            assert '+tcp' not in a and '+answer' in a
         out=';; status: SERVFAIL,' if mode=='clean_dns_fail' else ';; status: NOERROR,\nexample.com. 60 IN A 93.184.215.14'
     elif mode.startswith('clean') and a[1]=='fakeip.podkop.fyi':
         assert a[0] in ('@127.0.0.42','@127.0.0.1')
@@ -121,8 +125,8 @@ class PostbootCheck(unittest.TestCase):
         self.env=dict(os.environ, TEST_CASE=str(self.p),TEST_ROOT=str(self.root),TEST_SCRIPT=str(SCRIPT),
           UFI_POSTBOOT_SOURCE_ONLY='1', PATH=str(self.bin)+os.pathsep+os.environ['PATH'])
 
-    def run_check(self, mode='ok', token='test-run'):
-        (self.p/'state.json').write_text(json.dumps({'mode':mode,'target':TARGET,'calls':[]}))
+    def run_check(self, mode='ok', token='test-run', transport='tcp'):
+        (self.p/'state.json').write_text(json.dumps({'mode':mode,'target':TARGET,'calls':[],'transport':transport}))
         env=dict(self.env,TEST_MODE=mode,TEST_TOKEN=token)
         harness=HARNESS
         if mode.startswith('clean'):
@@ -139,6 +143,17 @@ class PostbootCheck(unittest.TestCase):
         calls=json.loads((self.p/'state.json').read_text())['calls']
         self.assertFalse(any(c[0]=='curl' for c in calls))
         self.assertFalse(any(c[0]=='sing-box' and 'check' in c for c in calls))
+
+    def test_clean_profile_yandex_check_honors_configured_transport(self):
+        for transport, want_tcp in (('tcp', True), ('udp', False)):
+            p=self.run_check('clean_ok', 'clean_'+transport, transport=transport)
+            self.assertEqual(p.returncode,0,p.stdout+p.stderr)
+            self.assertIn('CURRENT_BOOT_LTE_DNS_FAKEIP_OK',self.summary('clean_'+transport))
+            calls=json.loads((self.p/'state.json').read_text())['calls']
+            dig_calls=[c for c in calls if c[:2]==['dig','@77.88.8.8']]
+            self.assertTrue(dig_calls, transport)
+            for c in dig_calls:
+                self.assertEqual('+tcp' in c, want_tcp, (transport, c))
 
     def test_clean_profile_cannot_pass_with_wrong_fakeip_or_upstream_servfail(self):
         for mode in ('clean_fakeip_fail','clean_dns_fail'):

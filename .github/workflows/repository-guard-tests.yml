@@ -1,0 +1,49 @@
+name: Repository tool regression checks
+
+on:
+  push:
+    branches: [codex/ufi001c-repository-fixes]
+  pull_request:
+    paths:
+      - "flashtool/**"
+      - "files/etc/cardswitch/**"
+      - "build_setup_fix.py"
+      - "check_rootfs.py"
+      - "ufi001c-port/check_rootfs.py"
+      - "ufi001c-port/hotfix/**"
+      - "工具与脚本/gen_config.py"
+      - "config/**"
+      - "scripts/imm410_workflow.py"
+      - "tests/repository/**"
+      - ".github/workflows/repository-guard-tests.yml"
+      - ".github/workflows/Build_高通410 imm.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install compiler, USB headers and target shell
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y golang-go libusb-1.0-0-dev pkg-config busybox-static android-sdk-libsparse-utils python3-yaml
+      - name: Run shell and package-entry regressions
+        run: /usr/bin/python3 -m unittest discover -s tests/repository -v
+      - name: Validate auxiliary and regression workflow syntax
+        run: |
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -shellcheck= -pyflakes= \
+            '.github/workflows/Build_高通410 imm.yml' .github/workflows/repository-guard-tests.yml
+      - name: Resolve the pinned USB module
+        working-directory: flashtool
+        run: go mod tidy
+      - name: Check sparse transfers, interrupted backups and caller aborts
+        working-directory: flashtool
+        run: go test -race -count=1 -v ./...
+      - name: Compile Linux flashtool
+        working-directory: flashtool
+        run: go build ./...

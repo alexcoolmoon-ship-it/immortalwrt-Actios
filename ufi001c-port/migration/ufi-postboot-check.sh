@@ -132,7 +132,15 @@ proxy_probe() {
         return "$rc"
     fi
     if [ "$CLEAN_CHECK" = 1 ]; then
-        dig @77.88.8.8 example.com A +tcp +time=3 +tries=1 +noall +comments +answer >"$RUN/dns-upstream-$n.private" 2>/dev/null || return 1
+        # Yandex bootstrap check honors the configured transport (tcp|udp);
+        # an invalid or missing setting falls back to tcp, like the installer.
+        yandex_transport=$(cfg podkop.settings.ufi_bootstrap_transport 2>/dev/null)
+        case "$yandex_transport" in tcp|udp) ;; *) yandex_transport=tcp ;; esac
+        if [ "$yandex_transport" = tcp ]; then
+            dig @77.88.8.8 example.com A +tcp +time=3 +tries=1 +noall +comments +answer >"$RUN/dns-upstream-$n.private" 2>/dev/null || return 1
+        else
+            dig @77.88.8.8 example.com A +time=3 +tries=1 +noall +comments +answer >"$RUN/dns-upstream-$n.private" 2>/dev/null || return 1
+        fi
         grep -q 'status: NOERROR,' "$RUN/dns-upstream-$n.private" &&
           grep -Eq '[[:space:]]IN[[:space:]]+A[[:space:]]+[0-9]+\.' "$RUN/dns-upstream-$n.private"
         return $?

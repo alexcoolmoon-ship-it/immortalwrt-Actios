@@ -6,7 +6,7 @@ on:
       version:
         description: '版本号 (例如 v1.0.0)'
         required: false
-        default: 'v1.0.0'
+        default: 'v1.0.1'
         type: string
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
         run: |
           sudo apt-get update -q
           # Linux 本地编译用的 libusb
-          sudo apt-get install -y libusb-1.0-0-dev pkg-config
+          sudo apt-get install -y libusb-1.0-0-dev pkg-config android-sdk-libsparse-utils
           # Windows 交叉编译工具链
           sudo apt-get install -y gcc-mingw-w64-x86-64 gcc-mingw-w64-i686
           # rsrc 生成 Windows UAC manifest syso
@@ -60,6 +60,10 @@ jobs:
         run: |
           go mod tidy
           go mod download
+
+      - name: Check sparse offsets and incomplete NV backups
+        working-directory: flashtool
+        run: go test -race -count=1 ./...
 
       - name: 编译 Linux x64
         working-directory: flashtool

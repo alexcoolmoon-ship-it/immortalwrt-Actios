@@ -13,7 +13,7 @@ import (
 	"flashtool/winenv"
 )
 
-var Version = "v1.0.0"
+var Version = "v1.0.1"
 
 const (
 	colorReset  = "\033[0m"
@@ -64,6 +64,10 @@ func main() {
 	fmt.Printf("  %s✓%s boot.img：就绪\n", colorGreen, colorReset)
 	fmt.Printf("  %s✓%s system.img：就绪\n", colorGreen, colorReset)
 
+	const chunkSize = 200 * 1024 * 1024
+	if err := fastboot.ValidateSparseFile(systemImg, chunkSize); err != nil {
+		fatal("Invalid system.img (no device writes started): " + err.Error())
+	}
 	backupDir := filepath.Join(exeDir, "backup_"+time.Now().Format("20060102_150405"))
 
 	// ── 步骤 1：等待设备 ──────────────────────────────────────────
@@ -123,19 +127,14 @@ func main() {
 	// ── 步骤 3：备份基带 + 刷底层固件 ────────────────────────────
 	printSection("备份基带 + 刷入底层固件 [2/3]")
 
-	if err := os.MkdirAll(backupDir, 0755); err != nil {
+	// NV data belongs to this user. Refuse an existing timestamp directory.
+	if err := os.Mkdir(backupDir, 0700); err != nil {
 		fatal("无法创建备份目录：" + err.Error())
 	}
 
 	partitions := []string{"fsc", "fsg", "modemst1", "modemst2"}
-	for _, part := range partitions {
-		outFile := filepath.Join(backupDir, part+".bin")
-		fmt.Printf("  → 备份 %-12s", part)
-		if err := dev.OEMDump(part, outFile); err != nil {
-			fmt.Printf("%s失败（跳过）%s\n", colorYellow, colorReset)
-		} else {
-			fmt.Printf("%s完成%s\n", colorGreen, colorReset)
-		}
+	if err := backupNV(dev, partitions, backupDir); err != nil {
+		fatal(err.Error())
 	}
 	fmt.Printf("  %s✓%s 基带备份完成 → %s\n", colorGreen, colorReset, filepath.Base(backupDir))
 
@@ -169,18 +168,9 @@ func main() {
 		}
 	}
 
-	// 还原基带
-	for _, part := range partitions {
-		binFile := filepath.Join(backupDir, part+".bin")
-		if _, err := os.Stat(binFile); os.IsNotExist(err) {
-			continue
-		}
-		fmt.Printf("  → 还原 %-12s", part)
-		if err := dev.FlashFile(part, binFile, nil); err != nil {
-			fmt.Printf("%s失败%s\n", colorRed, colorReset)
-		} else {
-			fmt.Printf("%s完成%s\n", colorGreen, colorReset)
-		}
+	// Restore only a complete, validated set; abort on the first failure.
+	if err := restoreNV(dev, partitions, backupDir); err != nil {
+		fatal(err.Error())
 	}
 
 	dev.Erase("boot")
@@ -205,7 +195,6 @@ func main() {
 	}
 
 	fmt.Printf("  → 刷入 system.img（较大，请耐心等待）\n")
-	const chunkSize = 200 * 1024 * 1024
 	if err := dev.FlashFileSparse("rootfs", systemImg, chunkSize, makeProgress("system.img")); err != nil {
 		fatal("刷入 system.img 失败：" + err.Error())
 	}

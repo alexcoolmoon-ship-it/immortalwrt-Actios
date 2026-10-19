@@ -50,10 +50,8 @@ on:
         type: string
 
 env:
-  REPO_URL: https://github.com/${{ github.event.inputs.upstream }}
   REPO_BRANCH: master
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: ${{ format('config/{0}.config', github.event.inputs.profile) }}
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   UPLOAD_BIN_DIR: false
@@ -69,7 +67,11 @@ jobs:
       actions: write
     steps:
     - name: 🚀 编译 (Build)
+      id: checkout
       uses: actions/checkout@main
+
+    - name: Validate manual or API build inputs
+      run: python3 scripts/imm410_workflow.py event-env
 
     - name: Show hardware info
       run: |
@@ -129,33 +131,37 @@ jobs:
     - name: 读取锁定的上游 hash (Read locked upstream hash)
       id: lock
       run: |
-        CUSTOM_HASH="${{ github.event.inputs.custom_hash }}"
         LOCK_FILE="upstream_lock.txt"
-        if [ -n "$CUSTOM_HASH" ]; then
-          echo "locked_hash=$CUSTOM_HASH" >> $GITHUB_OUTPUT
-          echo "使用用户指定 hash: $CUSTOM_HASH"
-        elif [ -f "$LOCK_FILE" ]; then
-          HASH=$(cat $LOCK_FILE)
-          echo "locked_hash=$HASH" >> $GITHUB_OUTPUT
-          echo "使用锁定 hash: $HASH"
-        else
-          echo "locked_hash=" >> $GITHUB_OUTPUT
-          echo "upstream_lock.txt 不存在，使用最新 master"
+        HASH="$CUSTOM_HASH"
+        if [ -z "$HASH" ] && [ -f "$LOCK_FILE" ]; then
+          HASH=$(cat "$LOCK_FILE")
         fi
+        if [ -n "$HASH" ] && ! [[ "$HASH" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+          echo '::error::Invalid upstream commit hash'
+          exit 1
+        fi
+        echo "locked_hash=$HASH" >> "$GITHUB_OUTPUT"
+        echo "Upstream commit: ${HASH:-latest master}"
 
     - name: Clone source code
       working-directory: /mnt
+      env:
+        LOCKED_HASH: ${{ steps.lock.outputs.locked_hash }}
       run: |
-        df -hT $PWD
-        git clone $REPO_URL -b $REPO_BRANCH openwrt
-        if [ -n "${{ steps.lock.outputs.locked_hash }}" ]; then
-          cd openwrt && git checkout ${{ steps.lock.outputs.locked_hash }}
+        df -hT "$PWD"
+        git clone "$REPO_URL" -b "$REPO_BRANCH" openwrt
+        if [ -n "$LOCKED_HASH" ]; then
+          git -C openwrt checkout "$LOCKED_HASH"
         fi
-        ln -sf /mnt/openwrt $GITHUB_WORKSPACE/openwrt
+        ln -sf /mnt/openwrt "$GITHUB_WORKSPACE/openwrt"
 
 
-    - name:  files
-      run: cp -r files openwrt/files
+    - name: Merge custom rootfs files once
+      run: |
+        mkdir -p openwrt/files
+        if [ -d files ]; then
+          cp -a files/. openwrt/files/
+        fi
 
     - name: Load custom feeds
       run: |
@@ -178,23 +184,22 @@ jobs:
 
     - name: Load custom configuration
       run: |
-        [ -e files ] && mv files openwrt/files
-        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-        chmod +x $DIY_P2_SH
+        cp "$CONFIG_FILE" openwrt/.config
+        chmod +x "$DIY_P2_SH"
         cd openwrt
-        $GITHUB_WORKSPACE/$DIY_P2_SH
+        "$GITHUB_WORKSPACE/$DIY_P2_SH"
 
     - name: Install extra packages
-      if: ${{ inputs.extra_packages != '' }}
+      if: env.EXTRA_PACKAGES != ''
       run: |
         cd openwrt
         echo "=========================================="
         echo "User requested extra packages:"
-        echo "${{ inputs.extra_packages }}"
+        echo "$EXTRA_PACKAGES"
         echo "=========================================="
 
         # 提取系统设置参数（__ip__ 和 __hostname__ 前缀）
-        RAW='${{ inputs.extra_packages }}'
+        RAW="$EXTRA_PACKAGES"
         CUSTOM_IP=$(echo "$RAW" | grep -oP '(?<=__ip__)[^,\s]+' || true)
         CUSTOM_HOSTNAME=$(echo "$RAW" | grep -oP '(?<=__hostname__)[^,\s]+' || true)
 
@@ -239,7 +244,7 @@ jobs:
         
     - name: SSH 调试有效时间6h! 连接后输入q 输入exit即可退出，自动继续后续编译流程
       uses: mxschmitt/action-tmate@master
-      if: ${{ inputs.ssh || contains(github.event.action, 'ssh') }}
+      if: env.SSH_DEBUG == 'true'
       
       
     - name: Config defconfig
@@ -311,7 +316,6 @@ jobs:
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
-        PROFILE=${{ github.event.inputs.profile }}
 
         # 创建刷机包目录并打包 zip
         mkdir -p flash_package
@@ -330,8 +334,8 @@ jobs:
         rm flash_package/boot.img.gz flash_package/system.img.gz
         cp -r $GITHUB_WORKSPACE/刷机脚本/. flash_package/
         # 确保 bat 文件是 CRLF 换行（Windows 兼容）
-        unix2dos flash_package/*.bat 2>/dev/null || sed -i 's/\r//' flash_package/*.bat && sed -i 's/$/\r/' flash_package/*.bat
-        ZIP_NAME="OpenWrt_${PROFILE}${{ env.FILE_DATE }}_刷机包.zip"
+        python3 "$GITHUB_WORKSPACE/scripts/imm410_workflow.py" normalize-bat flash_package
+        ZIP_NAME="OpenWrt_${PROFILE}${FILE_DATE}_刷机包.zip"
         cd flash_package && zip -r "../$ZIP_NAME" . && cd ..
 
         # 整理 release 目录：zip + 单独固件 + 编译信息
@@ -355,9 +359,8 @@ jobs:
       id: tag
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
-        PROFILE=${{ github.event.inputs.profile }}
         # 提取用户设置的 IP 和主机名
-        RAW='${{ inputs.extra_packages }}'
+        RAW="$EXTRA_PACKAGES"
         CUSTOM_IP=$(echo "$RAW" | grep -oP '(?<=__ip__)[^,\s]+' || true)
         CUSTOM_HOSTNAME=$(echo "$RAW" | grep -oP '(?<=__hostname__)[^,\s]+' || true)
         DISPLAY_IP=${CUSTOM_IP:-192.168.1.1}
@@ -372,9 +375,9 @@ jobs:
           echo ""
           echo "| 项目 | 信息 |"
           echo "|------|------|"
-          echo "| 编译者 | ${{ github.actor }} |"
+          echo "| 编译者 | $GITHUB_ACTOR |"
           echo "| 机型 | ${PROFILE} |"
-          echo "| 内核版本 | ${{ env.KERNEL_VER }} |"
+          echo "| 内核版本 | $KERNEL_VER |"
           echo "| 管理地址 | ${DISPLAY_IP} |"
           echo "| 主机名 | ${DISPLAY_HOSTNAME} |"
           echo "| 默认用户 | root |"
@@ -395,7 +398,7 @@ jobs:
     - name: Generate file list
       if: env.UPLOAD_RELEASE == 'true' && steps.organize.outputs.status == 'success'
       run: |
-        find ${{ env.FIRMWARE }} -type f > file_list.txt
+        find "$FIRMWARE" -type f > file_list.txt
         echo "Collected files:"
         cat file_list.txt
         test -s file_list.txt || { echo "::error::No firmware files found"; exit 1; }
@@ -417,30 +420,28 @@ jobs:
         prerelease: false
 
     - name: Delete old workflow runs via GitHub API
-      if: always()
+      if: ${{ always() && steps.checkout.outcome == 'success' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         RETAIN_DAYS: 7
         KEEP_MINIMUM_RUNS: 5
       run: |
-        RUNS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-          "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=100")
+        CURRENT_FILE="$RUNNER_TEMP/imm410-current-run.json"
+        RUNS_FILE="$RUNNER_TEMP/imm410-runs.json"
+        curl --fail --silent --show-error -H "Authorization: Bearer $GITHUB_TOKEN" \
+          "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" -o "$CURRENT_FILE"
+        WORKFLOW_ID=$(python3 -c 'import json,sys; print(int(json.load(open(sys.argv[1]))["workflow_id"]))' "$CURRENT_FILE")
+        curl --fail --silent --show-error -H "Authorization: Bearer $GITHUB_TOKEN" \
+          "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW_ID/runs?per_page=100" -o "$RUNS_FILE"
         CUTOFF=$(date -d "-${RETAIN_DAYS} days" +%s)
-        DEL_IDS=$(echo "$RUNS" | jq -r --arg cutoff "$CUTOFF" --argjson keep "$KEEP_MINIMUM_RUNS" '
-          [.workflow_runs[]
-            | select((now - (.created_at | fromdateiso8601)) > ($cutoff | tonumber))
-            | {id, created_at}
-          ]
-          | sort_by(.created_at)
-          | .[:-$keep]
-          | .[].id
-        ')
+        DEL_IDS=$(python3 scripts/imm410_workflow.py select-old-runs "$RUNS_FILE" \
+          --cutoff "$CUTOFF" --keep "$KEEP_MINIMUM_RUNS" --workflow-id "$WORKFLOW_ID")
         if [[ -z "$DEL_IDS" ]]; then
           echo "No old runs to delete."
         else
-          echo "$DEL_IDS" | while read run_id; do
+          echo "$DEL_IDS" | while IFS= read -r run_id; do
             echo "Deleting run $run_id"
-            curl -X DELETE -H "Authorization: token $GITHUB_TOKEN" \
-              "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id"
+            curl --fail --silent --show-error -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$run_id"
           done
         fi

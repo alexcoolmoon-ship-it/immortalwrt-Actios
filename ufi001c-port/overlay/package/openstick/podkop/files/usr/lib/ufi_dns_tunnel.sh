@@ -7,6 +7,13 @@ umask 077
 die() { echo "ERROR: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "Required command: $1"; }
 setting() { uci -q get "podkop.settings.$1" 2>/dev/null || true; }
+resolve_bootstrap_transport() {
+    # Prints the configured Yandex bootstrap DNS transport (tcp|udp); dies otherwise.
+    bootstrap_transport=$(setting ufi_bootstrap_transport)
+    bootstrap_transport=${bootstrap_transport:-tcp}
+    case "$bootstrap_transport" in tcp|udp) ;; *) die "Invalid bootstrap DNS transport";; esac
+    printf '%s\n' "$bootstrap_transport"
+}
 
 filter_config() {
     section=${1:-$(setting ufi_dns_proxy_section)}
@@ -15,9 +22,7 @@ filter_config() {
         section=$(sh /usr/lib/podkop/ufi_startup.sh resolve) || die "No configured proxy section for DNS"
     fi
     case "$section" in *[!A-Za-z0-9_]*|'') die "Invalid section name";; esac
-    bootstrap_transport=$(setting ufi_bootstrap_transport)
-    bootstrap_transport=${bootstrap_transport:-tcp}
-    case "$bootstrap_transport" in tcp|udp) ;; *) die "Invalid bootstrap DNS transport";; esac
+    bootstrap_transport=$(resolve_bootstrap_transport)
     jq -e --arg tag "$section-out" --arg bootstrap_transport "$bootstrap_transport" '
         def proxy_leaves($cfg; $name; $seen):
             if ($name | type) != "string" or ($seen | index($name)) != null or ($seen | length) >= 16 then
@@ -127,6 +132,8 @@ check_status() {
     if [ -r "$conf" ]; then
         jq '{dns_servers: [.dns.servers[]? | {tag,type,server,detour}],
              proxy_bootstrap: [.outbounds[]? | select(.domain_resolver != null) | {tag,domain_resolver}]}' "$conf"
+        live_transport=$(jq -r '[.dns.servers[]? | select(.tag == "bootstrap-dns-server") | .type][0] // empty' "$conf" 2>/dev/null || true)
+        [ -n "$live_transport" ] && echo "Bootstrap DNS transport (live config): $live_transport"
     fi
     policy_status || status=1
     if probe_tunnel_dns; then
@@ -197,10 +204,12 @@ install_fix() {
     trap '[ -z "$probe_pid" ] || { kill "$probe_pid" 2>/dev/null || true; wait "$probe_pid" 2>/dev/null || true; }; rm -rf "$tempdir"' EXIT HUP INT TERM
 
     # Check the exact existing tunnel with direct bootstrap before changing UCI.
-    jq '(.dns.servers[] | select(.tag == "dns-server")) =
+    # The bootstrap uses the configured transport (tcp|udp), never a hardcoded one.
+    bootstrap_transport=$(resolve_bootstrap_transport)
+    jq --arg transport "$bootstrap_transport" '(.dns.servers[] | select(.tag == "dns-server")) =
         {tag:"dns-server",type:"https",server:"1.1.1.1",server_port:443,path:"/dns-query"} |
         (.dns.servers[] | select(.tag == "bootstrap-dns-server")) =
-        {tag:"bootstrap-dns-server",type:"udp",server:"77.88.8.8",server_port:53}' "$conf" |
+        {tag:"bootstrap-dns-server",type:$transport,server:"77.88.8.8",server_port:53}' "$conf" |
         filter_config "$section" > "$tempdir/candidate.json"
     sing-box check -c "$tempdir/candidate.json" >/dev/null || die "Config validation failed; no changes made"
     jq --arg tag "$section-out" '{
@@ -296,5 +305,5 @@ case "${1:-install}" in
     install) install_fix "${2:-@auto}" ;;
     check) check_status ;;
     rollback) [ -r /root/ufi-dns-tunnel-last-backup ] || die "No backup recorded"; restore_backup "$(cat /root/ufi-dns-tunnel-last-backup)" ;;
-    *) die "Usage: sh ufi-dns-tunnel.sh [install [section] | check | probe-dns | rollback]" ;;
+    *) die "Usage: sh ufi-dns-tunnel.sh [install [section] | check | probe-dns | probe-local [address] [name] | filter [section] | rollback]" ;;
 esac
