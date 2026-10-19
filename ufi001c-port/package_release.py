@@ -13,8 +13,8 @@ import stock_install
 from check_rootfs import FILES, FORBIDDEN, source_bytes
 from runtime_manifest import verify_runtime
 
-VERSION = '3.2.2-clean'
-PROFILE = 'UFI001C v3.2.2 Clean / OpenWrt 25.12.5'
+VERSION = '3.2.3-clean'
+PROFILE = 'UFI001C v3.2.3 Clean / OpenWrt 25.12.5'
 
 
 def check_reports(images):

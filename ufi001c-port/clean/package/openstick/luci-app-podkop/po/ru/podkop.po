@@ -827,8 +827,14 @@ msgstr "Вы можете выбрать выходной сетевой инт�
 msgid "Cloudflare DoH via proxy"
 msgstr "Cloudflare DoH через прокси"
 
-msgid "Use Yandex 77.88.8.8 over TCP only to resolve proxy hostnames, then send DNS to Cloudflare 1.1.1.1 over HTTPS through the proxy."
-msgstr "Яндекс 77.88.8.8 по TCP используется только для адресов прокси. Основные DNS-запросы идут к Cloudflare 1.1.1.1 по HTTPS через прокси."
+msgid "Use Yandex 77.88.8.8 only to resolve proxy hostnames, then send DNS to Cloudflare 1.1.1.1 over HTTPS through the proxy."
+msgstr "Яндекс 77.88.8.8 используется только для адресов прокси. Основные DNS-запросы идут к Cloudflare 1.1.1.1 по HTTPS через прокси."
+
+msgid "Yandex bootstrap protocol"
+msgstr "Протокол начального DNS Яндекса"
+
+msgid "UDP matches the early working configuration. Choose TCP if UDP is blocked. This applies only to proxy hostname lookup."
+msgstr "UDP соответствует ранней рабочей схеме. Если UDP заблокирован, выберите TCP. Настройка относится только к разрешению адресов прокси."
 
 msgid "Proxy section for Cloudflare"
 msgstr "Секция прокси для Cloudflare"

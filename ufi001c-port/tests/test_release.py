@@ -63,7 +63,8 @@ class ReleaseTests(unittest.TestCase):
             self.assertIsNone(archive.testzip())
             names = {Path(n).name for n in archive.namelist()}
             self.assertTrue({'INSTALL.cmd','RESTORE.cmd','boot.img','system.img','ACCESS.txt',
-                             'routing-rootfs-check.json','release-info.json','INSTALL-RU.md'} <= names)
+                             'routing-rootfs-check.json','release-info.json','INSTALL-RU.md',
+                             'CHECK-DNS.cmd','ufi-dns-check.sh','DNS-README-RU.txt'} <= names)
             self.assertFalse({'emmc.bin','podkop.saved'} & names)
             self.assertIn('UFI001C-USB/runtime/UFI001C-Installer.exe', archive.namelist())
             self.assertIn('UFI001C-USB/runtime/edl/UFI-EDL.exe', archive.namelist())

@@ -26,6 +26,9 @@ async function run() {
     form, {}, rpc, ui, { extend: x => x }, {}, main, x => x, (tag, text) => ({ tag, text }));
   module.createSettingsContent(section);
   assert.equal(options.cloudflare_dns_patch.default, '1');
+  assert.equal(options.cloudflare_bootstrap_type.default, 'udp');
+  assert.deepEqual(options.cloudflare_bootstrap_type.values, [['udp', 'UDP'], ['tcp', 'TCP']]);
+  assert.deepEqual(options.cloudflare_bootstrap_type.dependencies, [['cloudflare_dns_patch', '1']]);
   for (const name of ['dns_type', 'dns_server', 'bootstrap_dns_server'])
     assert.deepEqual(options[name].dependencies, [['cloudflare_dns_patch', '0']]);
   await options.cloudflare_dns_section.load();

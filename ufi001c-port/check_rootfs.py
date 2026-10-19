@@ -64,7 +64,7 @@ def verify(root):
     for installed in FORBIDDEN:
         if (root / installed).exists() or (root / installed).is_symlink():
             raise ValueError('Unwanted service/wrapper in clean rootfs: ' + installed)
-    for name in ('ip-full',):
+    for name in ('ip-full', 'timeout-coreutils'):
         binary = root / 'usr/libexec' / name
         if not binary.is_file():
             raise ValueError('Missing routing/DNS tool: ' + str(binary))
@@ -72,7 +72,7 @@ def verify(root):
         if header[:5] != b'\x7fELF\x02' or header[18:20] != b'\xb7\x00':
             raise ValueError('Expected an AArch64 tool: ' + name)
     return {'status': 'passed', 'profile': (root / 'etc/ufi001c-release').read_text().strip(),
-            'files_sha256': hashes, 'tools': ['ip-full'], 'absent_services': list(FORBIDDEN),
+            'files_sha256': hashes, 'tools': ['ip-full', 'timeout-coreutils'], 'absent_services': list(FORBIDDEN),
             'scope': 'Assembled rootfs contents; no hardware boot test'}
 
 

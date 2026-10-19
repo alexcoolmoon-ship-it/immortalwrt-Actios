@@ -34,7 +34,7 @@ from edl_watchdog import run_edl, EDLError
 from chunk_backup import full_backup, read_range, exclusive
 from radio_report import summarize as summarize_radio
 
-VERSION = '3.2.2-clean'
+VERSION = '3.2.3-clean'
 SECTOR = 512
 GIB = 1024**3
 NV = ('modemst1', 'modemst2', 'fsg', 'fsc', 'sec')
@@ -45,10 +45,11 @@ LIMITS = {'boot.img': 64*1024**2, 'system.img': GIB,
           'SHA256SUMS': 262144, 'ACCESS.txt': 16384, 'build.config': 2*1024**2,
           'xhttp-validation.json': 65536, 'addons.lock.json': 65536,
           'routing-rootfs-check.json': 65536, 'kernel-routing-check.txt': 16384,
+          'dns-runtime-check.txt': 65536,
           'validation.json': 65536, 'release-info.json': 16384,
           'INSTALL-RU.md': 65536, 'VALIDATION-v3.1.2.md': 65536,
           'VALIDATION-v3.1.3.md': 65536, 'VALIDATION-v3.1.4.md': 65536, 'VALIDATION-v3.1.5.md': 65536, 'VALIDATION-v3.1.6.md': 65536,
-          'VALIDATION-v3.2.0.md': 65536, 'VALIDATION-v3.2.1.md': 65536, 'VALIDATION-v3.2.2.md': 65536}
+          'VALIDATION-v3.2.0.md': 65536, 'VALIDATION-v3.2.1.md': 65536, 'VALIDATION-v3.2.2.md': 65536, 'VALIDATION-v3.2.3.md': 65536}
 
 
 def digest_bytes(data):
@@ -227,7 +228,7 @@ def firmware_files(source, out):
     settings = set(config.splitlines())
     for setting in ('CONFIG_PACKAGE_ufi001c-radio=y', 'CONFIG_PACKAGE_podkop-engine=y'):
         if setting not in settings:
-            raise ValueError('This is not the v3.2.2 clean XHTTP build: missing ' + setting)
+            raise ValueError('This is not the v3.2.3 clean XHTTP build: missing ' + setting)
     # Clean firmware deliberately excludes the old recovery services. Requiring
     # ufi-care here used to reject the real clean .config at the last ZIP gate.
     for package in ('sing-box', 'sing-box-tiny', 'podkop-engine-full',
@@ -589,6 +590,7 @@ PACKAGE_FILES = ('stock_install.py', 'ufi-install.py', 'radio_backup.py', 'radio
                  'portable_runtime.py', 'runtime_manifest.py', 'windows_entry.py', 'windows_edl.py', 'windows-runtime.lock.json',
                  'RUN.cmd', 'CHECK-PC.cmd', 'DRIVER-HELP.cmd', 'DRIVER-RU.txt',
                  'CHECK-LTE.cmd', 'ufi-postboot-check.sh',
+                 'CHECK-DNS.cmd', 'ufi-dns-check.sh', 'DNS-README-RU.txt',
                  'INSTALL.cmd', 'RESUME.cmd', 'RESTORE.cmd', 'MAKE-BUNDLE.cmd', 'STOCK-CHECK.cmd', 'CHECK-BACKUP.cmd',
                  'README-STOCK-RU.md', 'VALIDATION-STOCK.md', 'BASE-SOURCES.md')
 

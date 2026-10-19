@@ -11,11 +11,13 @@ import select
 import shlex
 import signal
 import socket
+import socketserver
 import ssl
 import struct
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -61,7 +63,7 @@ sing_box_init_config
         self.assertEqual(servers['dns-server']['type'], 'https')
         self.assertEqual(servers['dns-server']['tls']['server_name'], 'cloudflare-dns.com')
         self.assertEqual(servers['bootstrap-dns-server'], {
-            'type':'tcp','tag':'bootstrap-dns-server','server':'77.88.8.8','server_port':53})
+            'type':'udp','tag':'bootstrap-dns-server','server':'77.88.8.8','server_port':53})
         outbound = next(o for o in config['outbounds'] if o['tag'] == 'main-out')
         self.assertEqual(outbound['domain_resolver'], {'server':'bootstrap-dns-server','strategy':'ipv4_only'})
         self.assertEqual(str(outbound['transport']['uplink_chunk_size']), '4000')
@@ -76,6 +78,82 @@ sing_box_init_config
             path.write_text(json.dumps(config))
             p = subprocess.run(shlex.split(os.environ['UFI_TEST_ENGINE']) + ['check','-c',str(path)], capture_output=True, text=True)
             self.assertEqual(p.returncode, 0, p.stderr)
+
+    def test_tcp_bootstrap_is_explicit_and_invalid_protocol_stops_generation(self):
+        p, config = self.generate('config_set settings cloudflare_bootstrap_type tcp')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(next(s for s in config['dns']['servers'] if s['tag']=='bootstrap-dns-server')['type'], 'tcp')
+        p, config = self.generate('config_set settings cloudflare_bootstrap_type doh')
+        self.assertNotEqual(p.returncode, 0)
+        # generate() reuses the earlier output path; failure must not overwrite it.
+        self.assertEqual(next(s for s in config['dns']['servers'] if s['tag']=='bootstrap-dns-server')['type'], 'tcp')
+
+    def test_diagnostics_uses_selected_bootstrap_transport(self):
+        for protocol, flag in (('udp', '+notcp'), ('tcp', '+tcp')):
+            calls = self.tmp/'dns-query-calls'
+            calls.write_text('')
+            p = self.fixture.shell('''
+query_calls=''' + shlex.quote(str(calls)) + '''
+dig() {
+ printf '%s\\n' "$*" >> "$query_calls"
+ printf ';; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 1\\nexample.com. 60 IN A 203.0.113.7\\n'
+}
+config_set settings cloudflare_dns_patch 1
+config_set settings cloudflare_bootstrap_type ''' + protocol + '''
+cloudflare_doh_query_ok() { return 0; }
+config_foreach() { :; }; config_load() { :; }
+check_dns_available
+''')
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(json.loads(p.stdout)['bootstrap_dns_status'], 1)
+            query = next(line for line in calls.read_text().splitlines() if line.startswith('@77.88.8.8 '))
+            self.assertIn(flag, query.split())
+            self.assertNotIn('+tcp' if protocol == 'udp' else '+notcp', query.split())
+
+    def test_cloudflare_start_prepares_tls_clock_before_config_generation(self):
+        p = self.fixture.shell('''
+config_set settings cloudflare_dns_patch 1
+check_requirements() { :; }; migration() { :; }
+process_validate_service() { :; }; sleep() { :; }
+timeout() { printf 'TIME_PREPARED %s\\n' "$*"; return 0; }
+sing_box_init_config() { echo CONFIG_REJECTED; return 1; }
+TMP_SING_BOX_FOLDER=''' + shlex.quote(str(self.tmp/'singbox')) + '''
+TMP_RULESET_FOLDER=''' + shlex.quote(str(self.tmp/'rules')) + '''
+start_main
+''', protocol='tcp')
+        self.assertNotEqual(p.returncode, 0)
+        self.assertEqual(p.stdout.splitlines()[-1], 'CONFIG_REJECTED')
+        self.assertIn('TIME_PREPARED -k 2 10 /usr/sbin/ntpd -n -q -p 194.190.168.1', p.stdout)
+
+    def test_plain_dns_skips_time_query_and_failed_time_query_does_not_hang_start(self):
+        for enabled, protocol, expected in ((0,'tcp',False),(0,'udp',False),(0,'doh',True),
+                                            (0,'dot',True),(1,'tcp',True)):
+            p = self.fixture.shell('''
+config_set settings cloudflare_dns_patch ''' + str(enabled) + '''
+timeout() { echo TIME_ATTEMPT; return 124; }
+prepare_tls_clock
+echo CONTINUE
+''', protocol=protocol)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual('TIME_ATTEMPT' in p.stdout, expected)
+            self.assertIn('CONTINUE', p.stdout)
+
+    def test_real_timeout_kills_stuck_ntpd_even_if_it_ignores_term(self):
+        ntpd = self.tmp/'ntpd'
+        ntpd.write_text('#!/bin/sh\ntrap "" TERM\nexec sleep 60\n')
+        ntpd.chmod(0o755)
+        functions = FUNCTIONS.replace('/usr/sbin/ntpd', str(ntpd))
+        started = time.monotonic()
+        with patch.object(generator, 'FUNCTIONS', functions):
+            p = self.fixture.shell('''
+config_set settings cloudflare_dns_patch 1
+prepare_tls_clock
+echo CONTINUE
+''')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn('CONTINUE', p.stdout)
+        self.assertIn('Time synchronization failed or timed out', p.stderr)
+        self.assertLess(time.monotonic()-started, 16)
 
     def test_selector_with_direct_fallback_is_rejected(self):
         p, config = self.generate('''
@@ -266,6 +344,21 @@ class Bootstrap(live.DNSHandler):
             pass
 
 
+class BootstrapUDP(socketserver.BaseRequestHandler):
+    def handle(self):
+        query, sock = self.request
+        name, q = question(query)
+        self.server.names.append(name)
+        answer = query[:2] + bytes.fromhex('81800001000100000000') + q
+        answer += bytes.fromhex('c00c000100010000003c0004') + socket.inet_aton('127.0.0.1')
+        sock.sendto(answer, self.client_address)
+
+
+class UDPServer(socketserver.ThreadingUDPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
 class DoH(http.server.BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
 
@@ -328,6 +421,7 @@ class Relay(live.ProxyHandler):
 
 @unittest.skipUnless(os.environ.get('UFI_TEST_ENGINE'), 'requires actual firmware ARM64 engine')
 class CloudflareLiveTests(unittest.TestCase):
+    bootstrap_type = 'udp'
     stop_engine = live.LiveCleanTests.stop_engine
     start_engine = live.LiveCleanTests.start_engine
     http_via_fakeip = live.LiveCleanTests.http_via_fakeip
@@ -349,7 +443,10 @@ class CloudflareLiveTests(unittest.TestCase):
         context.load_cert_chain(cert,key)
         context.set_alpn_protocols(['http/1.1'])
         self.doh.socket = context.wrap_socket(self.doh.socket,server_side=True)
-        self.dns = live.Server(('127.0.0.1',0),Bootstrap)
+        if self.bootstrap_type == 'udp':
+            self.dns = UDPServer(('127.0.0.1',0), BootstrapUDP)
+        else:
+            self.dns = live.Server(('127.0.0.1',0), Bootstrap)
         self.dns.names = []
         self.proxy = live.Server(('127.0.0.1',0),Relay)
         self.proxy.https_port, self.proxy.targets = self.doh.server_port, []
@@ -358,7 +455,8 @@ class CloudflareLiveTests(unittest.TestCase):
             self.addCleanup(server.server_close)
             self.addCleanup(server.shutdown)
         rules = self.tmp/'rules'; rules.mkdir()
-        p, config = self.fixture.generate('TMP_RULESET_FOLDER=' + shlex.quote(str(rules)) + '''
+        p, config = self.fixture.generate('config_set settings cloudflare_bootstrap_type ' +
+                                         self.bootstrap_type + '\nTMP_RULESET_FOLDER=' + shlex.quote(str(rules)) + '''
 config_set main user_domain_list_type dynamic
 config_set main user_domains proxied.test
 ''')
@@ -423,3 +521,7 @@ cloudflare_status
         self.assertIn('1.1.1.1',self.proxy.targets)
         self.assertEqual(set(self.dns.names),{'proxy.test'})
         self.assertEqual(self.process.pid,pid)
+
+
+class CloudflareTCPLiveTests(CloudflareLiveTests):
+    bootstrap_type = 'tcp'

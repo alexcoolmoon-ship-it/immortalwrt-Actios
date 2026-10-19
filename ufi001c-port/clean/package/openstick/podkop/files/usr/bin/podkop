@@ -140,6 +140,25 @@ foreach_configured_section() {
     config_foreach configured_section_handler section "$1"
 }
 
+prepare_tls_clock() {
+    local dns_type cloudflare_enabled
+    config_get dns_type settings dns_type tcp
+    config_get_bool cloudflare_enabled settings cloudflare_dns_patch 0
+    [ "$cloudflare_enabled" != 1 ] || dns_type=doh
+    case "$dns_type" in
+    doh|dot)
+        # Literal NTP IPs avoid the DNS/proxy bootstrap cycle. Always bound
+        # the foreground query; an unavailable NTP server must not hang start.
+        if ! timeout -k 2 10 /usr/sbin/ntpd -n -q \
+            -p 194.190.168.1 -p 216.239.35.0 -p 216.239.35.4 \
+            -p 162.159.200.1 -p 162.159.200.123; then
+            log 'Time synchronization failed or timed out; TLS needs a correct clock' warn
+        fi
+        ;;
+    esac
+    return 0
+}
+
 start_main() {
     log "Starting podkop"
 
@@ -149,17 +168,7 @@ start_main() {
 
     foreach_configured_section process_validate_service
 
-    # Plain TCP/UDP DNS does not need a TLS clock. Do not block it on NTP.
-    local dns_type
-    config_get dns_type "settings" "dns_type" "tcp"
-    local cloudflare_enabled
-    config_get_bool cloudflare_enabled settings cloudflare_dns_patch 0
-    [ "$cloudflare_enabled" != 1 ] || dns_type=tcp
-    case "$dns_type" in
-    doh|dot)
-        /usr/sbin/ntpd -q -p 194.190.168.1 -p 216.239.35.0 -p 216.239.35.4 -p 162.159.200.1 -p 162.159.200.123
-        ;;
-    esac
+    prepare_tls_clock
 
     sleep 1
 
@@ -2070,6 +2079,7 @@ dns_query_ok() {
 
 check_dns_available() {
     local dns_type dns_server bootstrap_dns_server
+    local bootstrap_dns_type=tcp
     config_get dns_type "settings" "dns_type"
     config_get dns_server "settings" "dns_server"
     config_get bootstrap_dns_server "settings" "bootstrap_dns_server"
@@ -2097,6 +2107,8 @@ check_dns_available() {
     if [ "$cloudflare_enabled" = 1 ]; then
         dns_type=doh
         bootstrap_dns_server=77.88.8.8
+        config_get bootstrap_dns_type settings cloudflare_bootstrap_type udp
+        case "$bootstrap_dns_type" in udp|tcp) ;; *) bootstrap_dns_type=invalid;; esac
         display_dns_server="1.1.1.1 (proxy)"
         if cloudflare_doh_query_ok; then dns_status=1; fi
     elif [ "$dns_type" = "doh" ]; then
@@ -2132,7 +2144,11 @@ check_dns_available() {
 
     # Check bootstrap DNS server
     if [ -n "$bootstrap_dns_server" ]; then
-        if dns_query_ok @"$bootstrap_dns_server" "$domain" A +tcp +timeout=4 +tries=1; then
+        if [ "$bootstrap_dns_type" = udp ] &&
+            dns_query_ok @"$bootstrap_dns_server" "$domain" A +notcp +ignore +timeout=4 +tries=1; then
+            bootstrap_dns_status=1
+        elif [ "$bootstrap_dns_type" = tcp ] &&
+            dns_query_ok @"$bootstrap_dns_server" "$domain" A +tcp +timeout=4 +tries=1; then
             bootstrap_dns_status=1
         fi
     fi
@@ -2819,12 +2835,14 @@ cloudflare_proxy_section() {
 }
 
 sing_box_cloudflare_patch() {
-    local enabled section tag
+    local enabled section tag bootstrap_type
     config_get_bool enabled settings cloudflare_dns_patch 0
     [ "$enabled" = 1 ] || return 0
+    config_get bootstrap_type settings cloudflare_bootstrap_type udp
+    case "$bootstrap_type" in udp|tcp) ;; *) log 'Invalid Yandex bootstrap protocol' error; return 1;; esac
     section=$(cloudflare_proxy_section) || { log 'Cloudflare requires a configured proxy section' error; return 1; }
     tag=$(get_outbound_tag_by_section "$section")
-    config=$(printf '%s\n' "$config" | jq -e --arg tag "$tag" '
+    config=$(printf '%s\n' "$config" | jq -e --arg tag "$tag" --arg bootstrap_type "$bootstrap_type" '
       def proxy_leaves($cfg; $name; $seen):
         if ($seen | index($name)) != null or ($seen | length) >= 16 then
           error("Cyclic Cloudflare proxy group")
@@ -2853,7 +2871,7 @@ sing_box_cloudflare_patch() {
           path:"/dns-query", detour:$tag,
           tls:{enabled:true, server_name:"cloudflare-dns.com"}} |
         (.dns.servers[] | select(.tag == "bootstrap-dns-server")) = {
-          type:"tcp", tag:"bootstrap-dns-server", server:"77.88.8.8", server_port:53} |
+          type:$bootstrap_type, tag:"bootstrap-dns-server", server:"77.88.8.8", server_port:53} |
         (.outbounds[] | select((.server // "") != "")).domain_resolver =
           {server:"bootstrap-dns-server", strategy:"ipv4_only"} |
         .route.rule_set = ((.route.rule_set // []) | map(if .type == "remote" then .download_detour = $tag else . end)) |

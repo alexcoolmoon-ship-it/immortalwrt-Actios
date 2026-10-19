@@ -1158,7 +1158,13 @@ msgstr ""
 msgid "Cloudflare DoH via proxy"
 msgstr ""
 
-msgid "Use Yandex 77.88.8.8 over TCP only to resolve proxy hostnames, then send DNS to Cloudflare 1.1.1.1 over HTTPS through the proxy."
+msgid "Use Yandex 77.88.8.8 only to resolve proxy hostnames, then send DNS to Cloudflare 1.1.1.1 over HTTPS through the proxy."
+msgstr ""
+
+msgid "Yandex bootstrap protocol"
+msgstr ""
+
+msgid "UDP matches the early working configuration. Choose TCP if UDP is blocked. This applies only to proxy hostname lookup."
 msgstr ""
 
 msgid "Proxy section for Cloudflare"

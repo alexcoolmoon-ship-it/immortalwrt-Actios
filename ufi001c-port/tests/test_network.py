@@ -290,7 +290,7 @@ with (root / 'services.log').open('a') as out: out.write(pathlib.Path(__file__).
         header = bytearray(64)
         header[:5] = b'\x7fELF\x02'
         header[18:20] = b'\xb7\x00'
-        for name in ('ip-full', 'od-coreutils'):
+        for name in ('ip-full', 'timeout-coreutils'):
             p = self.tmp / 'usr/libexec' / name
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_bytes(header)

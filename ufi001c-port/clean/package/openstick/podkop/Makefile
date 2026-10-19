@@ -4,7 +4,7 @@ PKG_NAME:=podkop
 
 PKG_VERSION:=0.7.24
 
-PKG_RELEASE:=2
+PKG_RELEASE:=3
 
 PKG_MAINTAINER:=ITDog <podkop@itdog.info>
 PKG_LICENSE:=GPL-2.0-or-later
@@ -14,7 +14,7 @@ include $(INCLUDE_DIR)/package.mk
 define Package/podkop
 	SECTION:=net
 	CATEGORY:=Network
-	DEPENDS:=+podkop-engine +curl +jq +kmod-nft-tproxy +coreutils-base64 +bind-dig +ip-full
+	DEPENDS:=+podkop-engine +curl +jq +kmod-nft-tproxy +coreutils-base64 +coreutils-timeout +bind-dig +ip-full
 	CONFLICTS:=https-dns-proxy nextdns luci-app-passwall luci-app-passwall2
 	TITLE:=Domain routing app
 	URL:=https://podkop.net

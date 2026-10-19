@@ -12,10 +12,22 @@ function createSettingsContent(section, singBoxFeatures = []) {
     form.Flag,
     "cloudflare_dns_patch",
     _("Cloudflare DoH via proxy"),
-    _("Use Yandex 77.88.8.8 over TCP only to resolve proxy hostnames, then send DNS to Cloudflare 1.1.1.1 over HTTPS through the proxy."),
+    _("Use Yandex 77.88.8.8 only to resolve proxy hostnames, then send DNS to Cloudflare 1.1.1.1 over HTTPS through the proxy."),
   );
   o.default = "1";
   o.rmempty = false;
+
+  o = section.option(
+    form.ListValue,
+    "cloudflare_bootstrap_type",
+    _("Yandex bootstrap protocol"),
+    _("UDP matches the early working configuration. Choose TCP if UDP is blocked. This applies only to proxy hostname lookup."),
+  );
+  o.value("udp", "UDP");
+  o.value("tcp", "TCP");
+  o.default = "udp";
+  o.rmempty = false;
+  o.depends("cloudflare_dns_patch", "1");
 
   o = section.option(
     form.ListValue,

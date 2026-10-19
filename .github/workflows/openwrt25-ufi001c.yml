@@ -1,8 +1,8 @@
-name: OpenWrt 25.12.5 UFI001C v3.2.2 Clean / Portable USB
+name: OpenWrt 25.12.5 UFI001C v3.2.3 Clean / Portable USB
 
 on:
   push:
-    branches: [codex/ufi001c-clean-v3.2.2]
+    branches: [codex/ufi001c-clean-v3.2.3]
     paths: ["ufi001c-port/**", ".github/workflows/openwrt25-ufi001c.yml"]
   workflow_dispatch:
     inputs:
@@ -85,7 +85,7 @@ jobs:
       - name: Save verified Windows runtime
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ufi001c-windows-runtime-v3.2.2
+          name: ufi001c-windows-runtime-v3.2.3
           path: ${{ runner.temp }}/USB тест/runtime/
           if-no-files-found: error
           retention-days: 14
@@ -167,12 +167,13 @@ jobs:
           python3 ufi001c-port/check_rootfs.py "$RUNNER_TEMP/openwrt" | tee "$RUNNER_TEMP/routing-rootfs-check.json"
       - name: Check clean DNS and FakeIP with the built ARM64 engine
         run: |
-          set -eu
+          set -euo pipefail
           UFI_ROOT=$(find "$RUNNER_TEMP/openwrt/build_dir" -type d -name root-msm89xx | head -n1)
           test -x "$UFI_ROOT/usr/bin/sing-box"
           export UFI_TEST_ENGINE="qemu-aarch64 -L $UFI_ROOT $UFI_ROOT/usr/bin/sing-box"
-          sudo --preserve-env=UFI_TEST_ENGINE python3 -m unittest discover -s ufi001c-port/tests -p 'test_clean*.py' -v
-          sudo --preserve-env=UFI_TEST_ENGINE python3 -m unittest discover -s ufi001c-port/tests -p 'test_cloudflare_patch.py' -v
+          sudo --preserve-env=UFI_TEST_ENGINE python3 -m unittest discover -s ufi001c-port/tests -p 'test_clean*.py' -v 2>&1 | tee "$RUNNER_TEMP/dns-runtime-check.txt"
+          sudo --preserve-env=UFI_TEST_ENGINE python3 -m unittest discover -s ufi001c-port/tests -p 'test_cloudflare_patch.py' -v 2>&1 | tee -a "$RUNNER_TEMP/dns-runtime-check.txt"
+          echo 'UFI_DNS_RUNTIME=PASS (QEMU; hardware acceptance pending)' | tee -a "$RUNNER_TEMP/dns-runtime-check.txt"
       - name: Collect and inspect images
         id: images
         run: |
@@ -181,35 +182,36 @@ jobs:
           cp ufi001c-port/addons.lock.json "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
           cp ufi001c-port/migration/ufi-install.py ufi001c-port/migration/radio_backup.py "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
           cp ufi001c-port/INSTALL-RU.md "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
-          cp ufi001c-port/VALIDATION-v3.2.2.md "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
+          cp ufi001c-port/VALIDATION-v3.2.3.md "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
           cp "$RUNNER_TEMP/kernel-routing-check.txt" "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
           cp "$RUNNER_TEMP/routing-rootfs-check.json" "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
+          cp "$RUNNER_TEMP/dns-runtime-check.txt" "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5/"
           python3 ufi001c-port/migration/package_stock.py "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5"
       - name: Retrieve the Windows runtime from this exact run
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: ufi001c-windows-runtime-v3.2.2
+          name: ufi001c-windows-runtime-v3.2.3
           path: ${{ runner.temp }}/ufi-windows-runtime
       - name: Package the single USB installation ZIP
         run: |
           mkdir -p "$RUNNER_TEMP/ufi-release"
           python3 ufi001c-port/package_release.py \
             "$RUNNER_TEMP/UFI001C-OpenWrt-25.12.5" \
-            "$RUNNER_TEMP/ufi-release/UFI001C-OpenWrt-25.12.5-v3.2.2-USB.zip" \
+            "$RUNNER_TEMP/ufi-release/UFI001C-OpenWrt-25.12.5-v3.2.3-USB.zip" \
             --commit "$GITHUB_SHA" \
             --windows-runtime "$RUNNER_TEMP/ufi-windows-runtime"
       - name: Save firmware and access details
         if: ${{ !cancelled() && steps.images.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: UFI001C-OpenWrt-25.12.5-v3.2.2-Clean
+          name: UFI001C-OpenWrt-25.12.5-v3.2.3-Clean
           path: ${{ runner.temp }}/UFI001C-OpenWrt-25.12.5/
           if-no-files-found: error
           retention-days: 14
       - name: Save single download
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: UFI001C-v3.2.2-USB-Download
+          name: UFI001C-v3.2.3-USB-Download
           path: ${{ runner.temp }}/ufi-release/
           if-no-files-found: error
           retention-days: 14
@@ -219,11 +221,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release create "ufi001c-v3.2.2-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}" \
-            "$RUNNER_TEMP/ufi-release/UFI001C-OpenWrt-25.12.5-v3.2.2-USB.zip" \
-            "$RUNNER_TEMP/ufi-release/UFI001C-OpenWrt-25.12.5-v3.2.2-USB.zip.sha256" \
-            --target "$GITHUB_SHA" --title "UFI001C OpenWrt 25.12.5 — v3.2.2 Clean / Portable USB" \
-            --notes-file ufi001c-port/RELEASE-NOTES-v3.2.2.md --prerelease
+          gh release create "ufi001c-v3.2.3-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}" \
+            "$RUNNER_TEMP/ufi-release/UFI001C-OpenWrt-25.12.5-v3.2.3-USB.zip" \
+            "$RUNNER_TEMP/ufi-release/UFI001C-OpenWrt-25.12.5-v3.2.3-USB.zip.sha256" \
+            --target "$GITHUB_SHA" --title "UFI001C OpenWrt 25.12.5 — v3.2.3 Clean / Portable USB" \
+            --notes-file ufi001c-port/RELEASE-NOTES-v3.2.3.md --prerelease
       - name: Save build log
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

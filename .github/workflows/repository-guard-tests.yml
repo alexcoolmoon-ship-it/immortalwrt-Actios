@@ -2,7 +2,7 @@ name: Repository tool regression checks
 
 on:
   push:
-    branches: [codex/ufi001c-repository-fixes]
+    branches: [codex/ufi001c-repository-fixes, codex/ufi001c-clean-v3.2.3]
   pull_request:
     paths:
       - "flashtool/**"

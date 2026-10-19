@@ -143,11 +143,12 @@ class RootfsEntryPointTests(unittest.TestCase):
             binary = assembled/'usr/libexec/ip-full'; binary.parent.mkdir(parents=True)
             header = bytearray(20); header[:5] = b'\x7fELF\x02'; header[18:20] = b'\xb7\x00'
             binary.write_bytes(header)
+            (binary.parent/'timeout-coreutils').write_bytes(header)
             command = [sys.executable, str(repo/'check_rootfs.py'), str(Path(work)/'build')]
             result = subprocess.run(command, cwd=work, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stderr)
             manifest = json.loads(result.stdout)
-            self.assertEqual(manifest['tools'], ['ip-full'])
+            self.assertEqual(manifest['tools'], ['ip-full', 'timeout-coreutils'])
             self.assertIn('www/luci-static/resources/view/podkop/main.js', manifest['files_sha256'])
             forbidden = assembled/'usr/lib/podkop/ufi_dns_tunnel.sh'
             forbidden.parent.mkdir(parents=True); forbidden.write_text('LEGACY\n')

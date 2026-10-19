@@ -33,6 +33,7 @@ required = [
     "PACKAGE_kmod-nft-tproxy",
     "PACKAGE_kmod-nft-socket",
     "PACKAGE_ip-full",
+    "PACKAGE_coreutils-timeout",
 ]
 missing = [name for name in required if f"CONFIG_{name}=y\n" not in text]
 if missing:
