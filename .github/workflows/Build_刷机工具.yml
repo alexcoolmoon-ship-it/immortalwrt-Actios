@@ -29,7 +29,7 @@ jobs:
         run: |
           sudo apt-get update -q
           # Linux 本地编译用的 libusb
-          sudo apt-get install -y libusb-1.0-0-dev pkg-config
+          sudo apt-get install -y libusb-1.0-0-dev pkg-config android-sdk-libsparse-utils
           # Windows 交叉编译工具链
           sudo apt-get install -y gcc-mingw-w64-x86-64 gcc-mingw-w64-i686
           # rsrc 生成 Windows UAC manifest syso

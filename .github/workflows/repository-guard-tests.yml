@@ -25,7 +25,7 @@ jobs:
       - name: Install compiler, USB headers and target shell
         run: |
           sudo apt-get update
-          sudo apt-get install -y golang-go libusb-1.0-0-dev pkg-config busybox-static
+          sudo apt-get install -y golang-go libusb-1.0-0-dev pkg-config busybox-static android-sdk-libsparse-utils
       - name: Run shell and package-entry regressions
         run: python3 -m unittest discover -s tests/repository -v
       - name: Resolve the pinned USB module
