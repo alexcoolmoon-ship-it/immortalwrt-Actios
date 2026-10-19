@@ -15,13 +15,18 @@ class CmdReportingTests(unittest.TestCase):
             root = Path(temp) / 'USB тест'
             root.mkdir()
             report = root / 'UFI-CLOUDFLARE.txt'
+            script = Path(temp) / 'report.cmd'
             for name in ('APPLY.cmd', 'CHECK.cmd', 'ROLLBACK.cmd'):
                 lines = [line for line in (FIX/name).read_text(encoding='utf-8').splitlines()
                          if 'echo SSH_EXIT=' in line]
                 self.assertEqual(len(lines), 1, name)
+                # Execute a batch file just like the shipped launchers. Passing
+                # a redirection expression as a list argument adds MSVC quote
+                # escapes which CMD does not understand.
+                script.write_bytes(('@echo off\r\n'+lines[0]+'\r\n').encode('utf-8'))
                 for code in (0, 1, 2, 3, 255):
                     report.unlink(missing_ok=True)
-                    p = subprocess.run([os.environ['COMSPEC'], '/d', '/c', lines[0]],
+                    p = subprocess.run([os.environ['COMSPEC'], '/d', '/c', str(script)],
                         env=dict(os.environ, UFI_CF_DIR=str(root), UFI_CF_EXIT=str(code)),
                         capture_output=True)
                     self.assertEqual(p.returncode, 0, (name, code, p.stderr))
