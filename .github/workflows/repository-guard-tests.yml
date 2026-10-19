@@ -1,0 +1,39 @@
+name: Repository tool regression checks
+
+on:
+  push:
+    branches: [codex/ufi001c-repository-fixes]
+  pull_request:
+    paths:
+      - "flashtool/**"
+      - "files/etc/cardswitch/**"
+      - "build_setup_fix.py"
+      - "ufi001c-port/hotfix/**"
+      - "tests/repository/**"
+      - ".github/workflows/repository-guard-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install compiler, USB headers and target shell
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y golang-go libusb-1.0-0-dev pkg-config busybox-static
+      - name: Run shell and package-entry regressions
+        run: python3 -m unittest discover -s tests/repository -v
+      - name: Resolve the pinned USB module
+        working-directory: flashtool
+        run: go mod tidy
+      - name: Check sparse transfers, interrupted backups and caller aborts
+        working-directory: flashtool
+        run: go test -race -count=1 -v ./...
+      - name: Compile Linux flashtool
+        working-directory: flashtool
+        run: go build ./...

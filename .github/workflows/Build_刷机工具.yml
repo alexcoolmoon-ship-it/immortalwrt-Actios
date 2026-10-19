@@ -6,7 +6,7 @@ on:
       version:
         description: '版本号 (例如 v1.0.0)'
         required: false
-        default: 'v1.0.0'
+        default: 'v1.0.1'
         type: string
 
 jobs:
@@ -60,6 +60,10 @@ jobs:
         run: |
           go mod tidy
           go mod download
+
+      - name: Check sparse offsets and incomplete NV backups
+        working-directory: flashtool
+        run: go test -race -count=1 ./...
 
       - name: 编译 Linux x64
         working-directory: flashtool
