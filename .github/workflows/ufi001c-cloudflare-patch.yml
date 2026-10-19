@@ -1,0 +1,40 @@
+name: UFI001C Cloudflare DNS patch / no firmware rebuild
+on:
+  push:
+    branches: [codex/ufi001c-cloudflare-patch-v1]
+    paths: ["ufi001c-port/cloudflare-fix/**", "ufi001c-port/tests/test_cloudflare_patch.py", ".github/workflows/ufi001c-cloudflare-patch.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install ARM64 emulator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user e2fsprogs jq openssl bsdextrautils
+      - name: Download the exact successful clean firmware
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: UFI001C-OpenWrt-25.12.5-v3.2.1-Clean
+          run-id: 39166769599
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/clean-images
+      - name: Verify actual firmware engine
+        run: python3 ufi001c-port/ci/reference_engine.py "$RUNNER_TEMP/clean-images" "$RUNNER_TEMP/reference"
+      - name: Test tunnelled DoH, bootstrap, FakeIP and rollback guards
+        run: |
+          export UFI_TEST_ENGINE="qemu-aarch64 -L $RUNNER_TEMP/reference/root $RUNNER_TEMP/reference/root/usr/bin/sing-box"
+          sudo --preserve-env=UFI_TEST_ENGINE python3 -m unittest discover -s ufi001c-port/tests -p test_cloudflare_patch.py -v
+      - name: Package the offline patch
+        run: python3 ufi001c-port/cloudflare-fix/build.py "$RUNNER_TEMP/UFI001C-Cloudflare-Patch-v1.0.zip"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: UFI001C-Cloudflare-Patch-v1.0
+          path: ${{ runner.temp }}/UFI001C-Cloudflare-Patch-v1.0.zip
+          if-no-files-found: error
+          retention-days: 30
