@@ -46,7 +46,8 @@ if [ "$*" = '-q batch' ]; then cat >>"$CASE/batch"; fi
         self.assertIn("set network.modem.allowedmode='4g'",batch)
         self.assertIn("set network.modem.allowedbands='eutran-1|eutran-3|eutran-5|eutran-8|eutran-38|eutran-39|eutran-40|eutran-41'",batch)
         self.assertNotIn('set network.modem.excludedbands=',batch)
-        self.assertIn("set wireless.default_radio0.key='TEST-WIFI-KEY'",batch)
+        self.assertIn("set wireless.default_radio0.encryption='none'",batch)
+        self.assertIn("delete wireless.default_radio0.key",batch)
 
 
 if __name__=='__main__': unittest.main()

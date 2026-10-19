@@ -15,6 +15,9 @@ import package_release
 from test_migration import fixtures
 from test_stock_install import firmware_metadata
 from test_portable_runtime import make_runtime
+import stock_install
+
+PREFIX = f'UFI001C-{stock_install.VERSION}/'
 
 
 class ReleaseTests(unittest.TestCase):
@@ -65,11 +68,11 @@ class ReleaseTests(unittest.TestCase):
             self.assertTrue({'INSTALL.cmd','RESTORE.cmd','boot.img','system.img','ACCESS.txt',
                              'routing-rootfs-check.json','release-info.json','INSTALL-RU.md'} <= names)
             self.assertFalse({'emmc.bin','podkop.saved'} & names)
-            self.assertIn('UFI001C-USB/runtime/UFI001C-Installer.exe', archive.namelist())
-            self.assertIn('UFI001C-USB/runtime/edl/UFI-EDL.exe', archive.namelist())
-            self.assertEqual(archive.read('UFI001C-USB/build.config'),
+            self.assertIn(PREFIX + 'runtime/UFI001C-Installer.exe', archive.namelist())
+            self.assertIn(PREFIX + 'runtime/edl/UFI-EDL.exe', archive.namelist())
+            self.assertEqual(archive.read(PREFIX + 'build.config'),
                              (PORT/'clean/ufi001c.config').read_bytes())
-            info = json.loads(archive.read('UFI001C-USB/release-info.json'))
+            info = json.loads(archive.read(PREFIX + 'release-info.json'))
             self.assertEqual(info['hardware_acceptance'], 'pending')
             self.assertEqual(info['source_commit'], 'a' * 40)
         self.assertTrue(output.with_suffix('.zip.sha256').is_file())
