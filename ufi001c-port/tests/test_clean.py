@@ -77,7 +77,7 @@ esac
         prepare.verify_source()
         manifest = json.loads((CLEAN / 'podkop-upstream.json').read_text())
         self.assertEqual(len(manifest['files_sha256']), 26)
-        self.assertEqual(len(manifest['modified_sha256']), 7)
+        self.assertEqual(len(manifest['modified_sha256']), 9)
 
     def test_prepare_excludes_legacy_services_and_installs_upstream_ui(self):
         shutil.copytree(PORT / 'overlay', self.tmp, dirs_exist_ok=True)

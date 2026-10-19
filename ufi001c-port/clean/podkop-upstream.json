@@ -32,11 +32,13 @@
   },
   "modified_sha256": {
     "podkop/Makefile": "df5233f3da17d5c7f75824e2b02b33b6e528200bf8cb0a41d569b3dad79bb4aa",
-    "podkop/files/etc/config/podkop": "712c04e4daa55179b9d310b6e8d5eecef5932f6677caa15d7b2ac29c6297f3f0",
-    "podkop/files/usr/bin/podkop": "761783886ed321b6836367c4f95428b19e2b6023ea6b633de97d49ac101e936a",
+    "podkop/files/etc/config/podkop": "a3f13700124cff0f2e6ff2ae2f44a15b0209352c08349780cd52fe95167b0938",
+    "podkop/files/usr/bin/podkop": "d7cdfa3b4dfe7c1af6dd3f4ea0a32977106651162f646fdc85e8073adf57020a",
     "podkop/files/usr/lib/sing_box_config_facade.sh": "1a3ce556bfcb6be980292f1af5e322c05ac12236566f9dc3ba01786db2017a01",
     "podkop/files/usr/lib/sing_box_config_manager.sh": "4c0a055a7ce45aa633a4d517288306435352f2676d2e2be263b401750528bded",
     "luci-app-podkop/Makefile": "1f7fbbcbedbbbdbce33b039ad8cdaad6c5b3081b432125fa742c649980ea7a10",
-    "luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js": "b51077b00a2ffbd190014ed3aeaddaabd149b333cf8f8c7983ca73bd3049f358"
+    "luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js": "1d0e4c1b5eb7d08a3aba73f4993dec6481acb8612101e4fa38f7ba88cec42043",
+    "luci-app-podkop/po/ru/podkop.po": "90eaf630099dbcbd04b8a9bc72074627851136946144a424fec0f0ccaffbb8bf",
+    "luci-app-podkop/po/templates/podkop.pot": "8be04d3f30aabd6a7a2378d8d4adfe99e3ca2a8547cbeb32f390a687397b346c"
   }
 }

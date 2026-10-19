@@ -1,12 +1,70 @@
 "use strict";
 "require form";
 "require uci";
+"require fs";
+"require ui";
 "require baseclass";
 "require tools.widgets as widgets";
 "require view.podkop.main as main";
 
 function createSettingsContent(section, singBoxFeatures = []) {
   let o = section.option(
+    form.Flag,
+    "cloudflare_dns_patch",
+    _("Cloudflare DoH via proxy"),
+    _("Use Yandex 77.88.8.8 over TCP only to resolve proxy hostnames, then send DNS to Cloudflare 1.1.1.1 over HTTPS through the proxy."),
+  );
+  o.default = "1";
+  o.rmempty = false;
+
+  o = section.option(
+    form.ListValue,
+    "cloudflare_dns_section",
+    _("Proxy section for Cloudflare"),
+    _("Automatic selects the configured dns_only proxy section, or the first configured proxy section."),
+  );
+  o.depends("cloudflare_dns_patch", "1");
+  o.load = function () {
+    this.keylist = [""];
+    this.vallist = [_("Automatic")];
+    const sections = this.map?.data?.state?.values?.podkop ?? {};
+    for (const name in sections) {
+      const sec = sections[name];
+      if (sec[".type"] === "section" && sec.connection_type === "proxy") {
+        this.keylist.push(name);
+        this.vallist.push(name);
+      }
+    }
+    return Promise.resolve();
+  };
+
+  o = section.option(
+    form.Button,
+    "_cloudflare_check",
+    _("Cloudflare DNS check"),
+    _("Save and apply settings first. This checks a real Cloudflare DNS response through the running proxy."),
+  );
+  o.depends("cloudflare_dns_patch", "1");
+  o.inputtitle = _("Check Cloudflare");
+  o.inputstyle = "apply";
+  o.onclick = async function () {
+    try {
+      const result = await fs.exec("/usr/bin/podkop", ["cloudflare_status"]);
+      if (result.code !== 0) throw new Error("probe failed");
+      const status = JSON.parse(result.stdout);
+      if (status.mode !== "cloudflare_proxy") {
+        ui.addNotification(null, E("p", _("Cloudflare mode is not applied. Save and apply settings, then check again.")), "warning");
+      } else if (status.dns_status === 1) {
+        ui.addNotification(null, E("p", _("Cloudflare DoH through the proxy: working.")), "info");
+      } else {
+        ui.addNotification(null, E("p", _("Cloudflare did not answer through the proxy. Check that Podkop is running and the selected proxy section is working.")), "error");
+      }
+    } catch (error) {
+      ui.addNotification(null, E("p", _("Cloudflare check could not complete. Check that Podkop is running and try again.")), "error");
+    }
+  };
+
+  o = section.option(
     form.ListValue,
     "dns_type",
     _("DNS Protocol Type"),
@@ -18,6 +76,7 @@ function createSettingsContent(section, singBoxFeatures = []) {
   o.value("tcp", _("TCP (Unprotected DNS)"));
   o.default = "tcp";
   o.rmempty = false;
+  o.depends("cloudflare_dns_patch", "0");
 
   o = section.option(
     form.Value,
@@ -30,6 +89,7 @@ function createSettingsContent(section, singBoxFeatures = []) {
   });
   o.default = "77.88.8.8";
   o.rmempty = false;
+  o.depends("cloudflare_dns_patch", "0");
   o.validate = function (section_id, value) {
     const validation = main.validateDNS(value);
 
@@ -53,6 +113,7 @@ function createSettingsContent(section, singBoxFeatures = []) {
   });
   o.default = "77.88.8.8";
   o.rmempty = false;
+  o.depends("cloudflare_dns_patch", "0");
   o.validate = function (section_id, value) {
     const validation = main.validateDNS(value);
 

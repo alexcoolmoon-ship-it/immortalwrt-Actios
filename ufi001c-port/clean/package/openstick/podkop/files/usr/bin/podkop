@@ -149,11 +149,12 @@ start_main() {
 
     foreach_configured_section process_validate_service
 
-    br_netfilter_disable
-
     # Plain TCP/UDP DNS does not need a TLS clock. Do not block it on NTP.
     local dns_type
     config_get dns_type "settings" "dns_type" "tcp"
+    local cloudflare_enabled
+    config_get_bool cloudflare_enabled settings cloudflare_dns_patch 0
+    [ "$cloudflare_enabled" != 1 ] || dns_type=tcp
     case "$dns_type" in
     doh|dot)
         /usr/sbin/ntpd -q -p 194.190.168.1 -p 216.239.35.0 -p 216.239.35.4 -p 162.159.200.1 -p 162.159.200.123
@@ -165,13 +166,16 @@ start_main() {
     mkdir -p "$TMP_SING_BOX_FOLDER"
     mkdir -p "$TMP_RULESET_FOLDER"
 
+    # Reject invalid DNS/proxy settings before installing interception rules.
+    sing_box_init_config || return 1
+
     # base
+    br_netfilter_disable
     route_table_rule_mark
     create_nft_rules
     sing_box_configure_service
 
     # sing-box
-    sing_box_init_config
     foreach_configured_section add_cron_job
     /etc/init.d/sing-box start
 
@@ -216,7 +220,7 @@ stop_main() {
 }
 
 start() {
-    start_main
+    start_main || return 1
 
     config_get_bool dont_touch_dhcp "settings" "dont_touch_dhcp" 0
     if [ "$dont_touch_dhcp" -eq 0 ]; then
@@ -627,6 +631,7 @@ sing_box_init_config() {
     sing_box_configure_route
     sing_box_configure_experimental
     sing_box_additional_inbounds
+    sing_box_cloudflare_patch || return 1
     sing_box_save_config
 }
 
@@ -2087,7 +2092,14 @@ check_dns_available() {
         display_dns_server="dns.nextdns.io/$masked_path"
     fi
 
-    if [ "$dns_type" = "doh" ]; then
+    local cloudflare_enabled
+    config_get_bool cloudflare_enabled settings cloudflare_dns_patch 0
+    if [ "$cloudflare_enabled" = 1 ]; then
+        dns_type=doh
+        bootstrap_dns_server=77.88.8.8
+        display_dns_server="1.1.1.1 (proxy)"
+        if cloudflare_doh_query_ok; then dns_status=1; fi
+    elif [ "$dns_type" = "doh" ]; then
         # Check if dns_server already contains a path
         local doh_path="/dns-query"
         if echo "$dns_server" | grep -q "/"; then
@@ -2781,7 +2793,130 @@ Available commands:
 EOF
 }
 
+# UFI001C_CLOUDFLARE_PATCH_V1. No daemon, timer, network/Wi-Fi reload or cache deletion.
+cloudflare_first_proxy() {
+    local kind
+    [ -z "$cloudflare_selected" ] || return 0
+    config_get kind "$1" connection_type
+    [ "$kind" != proxy ] || cloudflare_selected="$1"
+}
+
+cloudflare_proxy_section() {
+    local cloudflare_selected kind
+    config_get cloudflare_selected settings cloudflare_dns_section
+    if [ -z "$cloudflare_selected" ]; then
+        config_get kind dns_only connection_type
+        if [ "$kind" = proxy ] && section_configured dns_only; then
+            cloudflare_selected=dns_only
+        else
+            foreach_configured_section cloudflare_first_proxy
+        fi
+    fi
+    case "$cloudflare_selected" in ''|*[!A-Za-z0-9_]*) return 1;; esac
+    config_get kind "$cloudflare_selected" connection_type
+    [ "$kind" = proxy ] && section_configured "$cloudflare_selected" || return 1
+    printf '%s\n' "$cloudflare_selected"
+}
+
+sing_box_cloudflare_patch() {
+    local enabled section tag
+    config_get_bool enabled settings cloudflare_dns_patch 0
+    [ "$enabled" = 1 ] || return 0
+    section=$(cloudflare_proxy_section) || { log 'Cloudflare requires a configured proxy section' error; return 1; }
+    tag=$(get_outbound_tag_by_section "$section")
+    config=$(printf '%s\n' "$config" | jq -e --arg tag "$tag" '
+      def proxy_leaves($cfg; $name; $seen):
+        if ($seen | index($name)) != null or ($seen | length) >= 16 then
+          error("Cyclic Cloudflare proxy group")
+        else [$cfg.outbounds[]? | select(.tag == $name)] as $hits |
+          if ($hits|length) != 1 then error("Missing Cloudflare proxy outbound")
+          else $hits[0] as $o |
+            if ($o.detour // "") != "" then error("Chained Cloudflare proxy is unsupported")
+            elif $o.type == "selector" or $o.type == "urltest" then
+              (($o.outbounds // []) + ($o.fallbacks // [])) as $children |
+              if ($children|length) == 0 then error("Empty Cloudflare proxy group")
+              elif ($o.type == "selector" and ($o.default // "") != "" and
+                    ($children|index($o.default)) == null) then error("Invalid proxy default")
+              else [$children[] | proxy_leaves($cfg; .; $seen + [$name])[]] | unique end
+            elif (["vless","trojan","shadowsocks","vmess","socks","http","hysteria2","tuic","anytls"]|index($o.type)) != null and
+                 (($o.server // "")|length) > 0 then [$name]
+            else error("Cloudflare DNS requires proxies only") end
+          end
+        end;
+      . as $cfg | proxy_leaves($cfg; $tag; []) as $leaves |
+      if ([.dns.servers[]? | select(.tag == "dns-server")]|length) != 1 or
+         ([.dns.servers[]? | select(.tag == "bootstrap-dns-server")]|length) != 1 then
+        error("Unexpected DNS configuration")
+      else
+        (.dns.servers[] | select(.tag == "dns-server")) = {
+          type:"https", tag:"dns-server", server:"1.1.1.1", server_port:443,
+          path:"/dns-query", detour:$tag,
+          tls:{enabled:true, server_name:"cloudflare-dns.com"}} |
+        (.dns.servers[] | select(.tag == "bootstrap-dns-server")) = {
+          type:"tcp", tag:"bootstrap-dns-server", server:"77.88.8.8", server_port:53} |
+        (.outbounds[] | select((.server // "") != "")).domain_resolver =
+          {server:"bootstrap-dns-server", strategy:"ipv4_only"} |
+        .route.rule_set = ((.route.rule_set // []) | map(if .type == "remote" then .download_detour = $tag else . end)) |
+        .inbounds = ([.inbounds[]? | select(.tag != "service-mixed-in")] + [{
+          type:"mixed",tag:"service-mixed-in",listen:"127.0.0.1",listen_port:4534}]) |
+        .route.rules = ([{inbound:["service-mixed-in"],action:"route",outbound:$tag}] +
+          [.route.rules[]? | select(((.inbound // [])|index("service-mixed-in")) == null)])
+      end') || { log 'Cannot configure Cloudflare tunnel' error; return 1; }
+}
+
+cloudflare_doh_query_ok() (
+    # Probe the same outbound and endpoint as the real resolver, not the cache
+    # and not the operator-blocked direct DoH path.
+    local conf work
+    config_get conf settings config_path /etc/sing-box/config.json
+    jq -e '
+      . as $c | [.dns.servers[]? | select(.tag == "dns-server")] as $d |
+      ($d|length) == 1 and $d[0].type == "https" and $d[0].server == "1.1.1.1" and
+      $d[0].path == "/dns-query" and ($d[0].detour // "") != "" and
+      any(.inbounds[]?; .tag == "service-mixed-in" and .listen == "127.0.0.1" and .listen_port == 4534) and
+      any(.route.rules[]?; .outbound == $d[0].detour and
+          ((.inbound // [])|index("service-mixed-in")) != null)
+    ' "$conf" >/dev/null || return 1
+    work=$(mktemp -d /tmp/ufi-cf-probe.XXXXXX) || return 1
+    trap 'rm -rf "$work"' EXIT HUP INT TERM
+    printf '\000\000\001\000\000\001\000\000\000\000\000\000\007example\003com\000\000\001\000\001' > "$work/query"
+    curl --noproxy '' --proxy http://127.0.0.1:4534 --fail --silent --show-error \
+      --connect-timeout 4 --max-time 12 \
+      -H 'Content-Type: application/dns-message' -H 'Accept: application/dns-message' \
+      --data-binary "@$work/query" https://1.1.1.1/dns-query > "$work/answer" 2>/dev/null || return 1
+    set -- $(hexdump -v -n 12 -e '1/1 "%u "' "$work/answer")
+    [ "$#" = 12 ] || return 1
+    [ "$1" = 0 ] && [ "$2" = 0 ] && [ "$(($3 & 128))" != 0 ] &&
+      [ "$(($3 & 2))" = 0 ] && [ "$(($4 & 15))" = 0 ] &&
+      [ "$(($5 * 256 + $6))" = 1 ] && [ "$(($7 * 256 + $8))" -gt 0 ] &&
+      [ "$(wc -c < "$work/answer")" -gt 33 ]
+)
+
+cloudflare_generate() {
+    local cloudflare_output="$1"
+    mkdir -p "$TMP_RULESET_FOLDER" || return 1
+    sing_box_save_config() {
+        sing_box_cm_save_config_to_file "$config" "$cloudflare_output" || return 1
+        sing-box check -c "$cloudflare_output" >/dev/null 2>&1
+    }
+    sing_box_init_config
+}
+
+cloudflare_status() {
+    local enabled mode=custom status=0
+    config_get_bool enabled settings cloudflare_dns_patch 0
+    if [ "$enabled" = 1 ]; then
+        mode=cloudflare_proxy
+        cloudflare_doh_query_ok && status=1
+    fi
+    printf '{"mode":"%s","dns_status":%s}\n' "$mode" "$status"
+}
+
 case "$1" in
+cloudflare_status) cloudflare_status ;;
+cloudflare_section) cloudflare_proxy_section ;;
+cloudflare_check) cloudflare_doh_query_ok ;;
+cloudflare_generate) cloudflare_generate "$2" ;;
 start)
     start
     ;;

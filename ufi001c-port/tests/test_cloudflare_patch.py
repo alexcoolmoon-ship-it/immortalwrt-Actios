@@ -27,7 +27,9 @@ FIX = PORT / 'cloudflare-fix'
 spec = importlib.util.spec_from_file_location('cloudflare_build', FIX / 'build.py')
 build = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(build)
-PROGRAM = build.patched_program()
+LEGACY_PROGRAM = build.patched_program()
+# Exercise the actual program shipped in the new image, not a patch-only copy.
+PROGRAM = generator.PROGRAM
 FUNCTIONS = PROGRAM[PROGRAM.index('check_requirements() {'):PROGRAM.rindex('\ncase "$1" in')]
 
 
@@ -124,10 +126,10 @@ check_dns_available
             self.assertIsNone(archive.testzip())
             installer = archive.read('UFI001C-Cloudflare-Patch/install.sh').decode()
             self.assertIn(hashlib.sha256(build.BASE.read_bytes()).hexdigest(), installer)
-            self.assertIn(hashlib.sha256(PROGRAM.encode()).hexdigest(), installer)
+            self.assertIn(hashlib.sha256(LEGACY_PROGRAM.encode()).hexdigest(), installer)
             import base64
             encoded = installer.split("<<'UFI_CLOUDFLARE_PROGRAM'\n",1)[1].split('\nUFI_CLOUDFLARE_PROGRAM',1)[0]
-            self.assertEqual(base64.b64decode(encoded).decode(), PROGRAM)
+            self.assertEqual(base64.b64decode(encoded).decode(), LEGACY_PROGRAM)
             for name in archive.namelist():
                 if name.endswith('.sh'):
                     p = subprocess.run(['sh','-n'], input=archive.read(name), capture_output=True)
@@ -192,6 +194,52 @@ esac
         result=self.run_installer(altered=True)
         self.assertNotEqual(result.returncode,0)
         self.assertIn('other modifications',result.stderr)
+
+    def test_shipped_defaults_enable_cloudflare_and_keep_empty_proxy_template(self):
+        config = generator.CLEAN / 'package/openstick/podkop/files/etc/config/podkop'
+        p, data = self.generate('''
+config_get test_link main proxy_string
+CONFIG_SECTIONS=''
+. ''' + shlex.quote(str(config)) + '''
+config_get empty main proxy_string
+[ -z "$empty" ] || exit 1
+config_set main proxy_string "$test_link"
+''')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(next(s for s in data['dns']['servers'] if s['tag']=='dns-server')['detour'], 'main-out')
+
+    def test_mode_off_keeps_native_dns_without_service_listener(self):
+        p, data = self.generate('config_set settings cloudflare_dns_patch 0')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertNotIn('detour', next(s for s in data['dns']['servers'] if s['tag']=='dns-server'))
+        self.assertFalse(any(i['tag']=='service-mixed-in' for i in data['inbounds']))
+
+    def test_cloudflare_button_status_does_not_pass_when_disabled_or_probe_fails(self):
+        for enabled, probe, expected in ((0,0,0),(1,1,0),(1,0,1)):
+            p = self.fixture.shell('''
+config_set settings cloudflare_dns_patch ''' + str(enabled) + '''
+cloudflare_doh_query_ok() { return ''' + str(probe) + '''; }
+cloudflare_status
+''')
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(json.loads(p.stdout), {'mode':'cloudflare_proxy' if enabled else 'custom', 'dns_status':expected})
+
+    def test_invalid_configuration_stops_before_rules_engine_and_dhcp(self):
+        p = self.fixture.shell('''
+check_requirements() { :; }; migration() { :; }
+process_validate_service() { :; }; sleep() { :; }
+br_netfilter_disable() { echo UNEXPECTED_NETFILTER; }
+route_table_rule_mark() { echo UNEXPECTED_ROUTE; }
+create_nft_rules() { echo UNEXPECTED_NFT; }
+sing_box_configure_service() { echo UNEXPECTED_SERVICE; }
+sing_box_init_config() { echo CONFIG_REJECTED; return 1; }
+dnsmasq_configure() { echo UNEXPECTED_DHCP; }
+TMP_SING_BOX_FOLDER=''' + shlex.quote(str(self.tmp/'singbox')) + '''
+TMP_RULESET_FOLDER=''' + shlex.quote(str(self.tmp/'rules')) + '''
+start
+''')
+        self.assertNotEqual(p.returncode, 0)
+        self.assertEqual(p.stdout.strip(), 'CONFIG_REJECTED')
 
 
 def question(query):
@@ -292,7 +340,7 @@ class CloudflareLiveTests(unittest.TestCase):
         self.tmp = self.fixture.tmp
         cert, key = self.tmp/'cert.pem', self.tmp/'key.pem'
         subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1',
-                        '-subj','/CN=cloudflare-dns.com','-addext','subjectAltName=DNS:cloudflare-dns.com',
+                        '-subj','/CN=cloudflare-dns.com','-addext','subjectAltName=DNS:cloudflare-dns.com,IP:1.1.1.1',
                         '-keyout',str(key),'-out',str(cert)],check=True,capture_output=True)
         self.doh = http.server.ThreadingHTTPServer(('127.0.0.1',0),DoH)
         self.doh.daemon_threads = True
@@ -315,6 +363,7 @@ config_set main user_domain_list_type dynamic
 config_set main user_domains proxied.test
 ''')
         self.assertEqual(p.returncode,0,p.stderr)
+        self.cert = cert
         for server in config['dns']['servers']:
             if server['tag'] == 'bootstrap-dns-server':
                 server.update(server='127.0.0.1',server_port=self.dns.server_address[1])
@@ -327,7 +376,8 @@ config_set main user_domains proxied.test
         self.dns_port, self.mixed_port = live.free_port(),live.free_port()
         config['inbounds'] = [
             {'type':'direct','tag':'dns-in','listen':'127.0.0.1','listen_port':self.dns_port},
-            {'type':'mixed','tag':'tproxy-in','listen':'127.0.0.1','listen_port':self.mixed_port}]
+            {'type':'mixed','tag':'tproxy-in','listen':'127.0.0.1','listen_port':self.mixed_port},
+            next(i for i in config['inbounds'] if i['tag']=='service-mixed-in')]
         config['route']['auto_detect_interface'] = False
         config['experimental'].pop('clash_api',None)
         config['experimental']['cache_file']['path'] = str(self.tmp/'cache.db')
@@ -356,4 +406,20 @@ config_set main user_domains proxied.test
         self.assertEqual(set(self.dns.names),{'proxy.test'})
         self.doh.failing = False
         self.assertEqual(live.dns_query(self.dns_port,'recovered.example'),'203.0.113.7')
+        self.assertEqual(self.process.pid,pid)
+
+    def test_actual_button_probe_uses_tunnel_and_rejects_servfail(self):
+        pid = self.process.pid
+        for failing, expected in ((False,1),(True,0),(False,1)):
+            self.doh.failing = failing
+            with patch.dict(os.environ, {'CURL_CA_BUNDLE':str(self.cert)}):
+                p = self.fixture.fixture.shell('''
+config_set settings cloudflare_dns_patch 1
+config_set settings config_path ''' + shlex.quote(str(self.config)) + '''
+cloudflare_status
+''')
+            self.assertEqual(p.returncode,0,p.stderr)
+            self.assertEqual(json.loads(p.stdout), {'mode':'cloudflare_proxy','dns_status':expected})
+        self.assertIn('1.1.1.1',self.proxy.targets)
+        self.assertEqual(set(self.dns.names),{'proxy.test'})
         self.assertEqual(self.process.pid,pid)

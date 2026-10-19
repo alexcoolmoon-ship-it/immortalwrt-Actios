@@ -1,8 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0-only
 [ "$(cat /tmp/sysinfo/board_name)" = 'thwc,ufi001c' ] || exit 0
-# Upstream Podkop configuration: no global DNS detour or custom recovery loop.
-# Keep ordinary LTE DNS until the owner supplies their own proxy URL.
+# Podkop starts only after the owner supplies their own proxy URL.
+# Cloudflare DoH then uses that proxy; only its hostname uses Yandex TCP.
 uci -q batch <<'EOF'
 set sing-box.main.dns_fallback='0'
 set sing-box.main.failsafe='0'

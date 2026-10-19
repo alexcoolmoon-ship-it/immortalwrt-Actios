@@ -1154,3 +1154,39 @@ msgstr ""
 #: ../luci-app-podkop/htdocs/luci-static/resources/view/podkop/settings.js:127
 msgid "You can select Output Network Interface, by default autodetect"
 msgstr ""
+
+msgid "Cloudflare DoH via proxy"
+msgstr ""
+
+msgid "Use Yandex 77.88.8.8 over TCP only to resolve proxy hostnames, then send DNS to Cloudflare 1.1.1.1 over HTTPS through the proxy."
+msgstr ""
+
+msgid "Proxy section for Cloudflare"
+msgstr ""
+
+msgid "Automatic selects the configured dns_only proxy section, or the first configured proxy section."
+msgstr ""
+
+msgid "Automatic"
+msgstr ""
+
+msgid "Cloudflare DNS check"
+msgstr ""
+
+msgid "Save and apply settings first. This checks a real Cloudflare DNS response through the running proxy."
+msgstr ""
+
+msgid "Check Cloudflare"
+msgstr ""
+
+msgid "Cloudflare mode is not applied. Save and apply settings, then check again."
+msgstr ""
+
+msgid "Cloudflare DoH through the proxy: working."
+msgstr ""
+
+msgid "Cloudflare did not answer through the proxy. Check that Podkop is running and the selected proxy section is working."
+msgstr ""
+
+msgid "Cloudflare check could not complete. Check that Podkop is running and try again."
+msgstr ""

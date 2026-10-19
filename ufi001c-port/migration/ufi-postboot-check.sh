@@ -8,13 +8,14 @@ PREVIOUS=/root/ufi-profile/LAST
 TARGET='eutran-1|eutran-3|eutran-5|eutran-8|eutran-38|eutran-39|eutran-40|eutran-41'
 RUN=''
 CLEAN_CHECK=0
+CLOUDFLARE_CHECK=0
 read_boot() { cat /proc/sys/kernel/random/boot_id; }
 read_board() { cat /tmp/sysinfo/board_name 2>/dev/null; }
 read_arch() { uname -m; }
 mono() { cut -d. -f1 /proc/uptime; }
 precise_mono() { cut -d' ' -f1 /proc/uptime; }
 cfg() { uci -q get "$1" 2>/dev/null || true; }
-clean_profile() { grep -qF 'v3.2.1 Clean' /etc/ufi001c-release 2>/dev/null; }
+clean_profile() { grep -qE '^UFI001C v[0-9]+\.[0-9]+\.[0-9]+ Clean / OpenWrt ' /etc/ufi001c-release 2>/dev/null; }
 health() {
     [ "$CLEAN_CHECK" = 1 ] || { /usr/sbin/ufi-lte-health status; return $?; }
     local status dev
@@ -125,6 +126,11 @@ profile_matches() {
 }
 proxy_probe() {
     local n=$1 code rc=0
+    if [ "$CLOUDFLARE_CHECK" = 1 ]; then
+        podkop cloudflare_check >/dev/null 2>&1 || rc=$?
+        printf 'sample=%s cloudflare_dns_exit=%s\n' "$n" "$rc" >>"$RUN/report/proxy-probes.txt"
+        return "$rc"
+    fi
     if [ "$CLEAN_CHECK" = 1 ]; then
         dig @77.88.8.8 example.com A +tcp +time=3 +tries=1 +noall +comments +answer >"$RUN/dns-upstream-$n.private" 2>/dev/null || return 1
         grep -q 'status: NOERROR,' "$RUN/dns-upstream-$n.private" &&
@@ -163,7 +169,11 @@ collect() {
     mkdir "$RUN/report" || return 1
     start_boot=$(read_boot)
     CLEAN_CHECK=0
+    CLOUDFLARE_CHECK=0
     clean_profile && CLEAN_CHECK=1
+    if [ "$CLEAN_CHECK" = 1 ] && [ "$(cfg podkop.settings.cloudflare_dns_patch)" = 1 ]; then
+        CLOUDFLARE_CHECK=1
+    fi
     started_at=$(precise_mono)
     {
         printf 'Fresh postboot check 1.1\nRun token: %s\nUTC: ' "$token"; date -u
@@ -209,7 +219,9 @@ collect() {
     elif [ "$proxy_ok" -ne 3 ] || [ "$dns_ok" -ne 3 ]; then result=LTE_UP_DNS_OR_PROXY_UNSTABLE
     else result=CURRENT_BOOT_LTE_DNS_PROXY_OK; fi
     if [ "$CLEAN_CHECK" = 1 ] && [ "$result" = CURRENT_BOOT_LTE_DNS_PROXY_OK ]; then
-        if [ "$fakeip_ok" -eq 3 ]; then result=CURRENT_BOOT_LTE_DNS_FAKEIP_OK
+        if [ "$fakeip_ok" -eq 3 ]; then
+            if [ "$CLOUDFLARE_CHECK" = 1 ]; then result=CURRENT_BOOT_LTE_CLOUDFLARE_FAKEIP_OK
+            else result=CURRENT_BOOT_LTE_DNS_FAKEIP_OK; fi
         else result=LTE_UP_LOCAL_FAKEIP_NOT_CONFIRMED; fi
     fi
     # The short probe interval does not certify long-term RF stability.
@@ -220,7 +232,11 @@ collect() {
         printf 'UFI fresh postboot check 1.1\n%s\n\n' "$result"
         printf 'Run token: %s\nStart boot ID: %s\nEnd boot ID: %s\n' "$token" "$start_boot" "$end_boot"
         if [ "$CLEAN_CHECK" = 1 ]; then
-            printf 'LTE health: %s/3\nUpstream TCP DNS: %s/3\nRouter DNS: %s/3\nLocal FakeIP and marked route: %s/3\n' "$health_ok" "$proxy_ok" "$dns_ok" "$fakeip_ok"
+            if [ "$CLOUDFLARE_CHECK" = 1 ]; then
+                printf 'LTE health: %s/3\nCloudflare DoH via proxy: %s/3\nRouter DNS: %s/3\nLocal FakeIP and marked route: %s/3\n' "$health_ok" "$proxy_ok" "$dns_ok" "$fakeip_ok"
+            else
+                printf 'LTE health: %s/3\nUpstream TCP DNS: %s/3\nRouter DNS: %s/3\nLocal FakeIP and marked route: %s/3\n' "$health_ok" "$proxy_ok" "$dns_ok" "$fakeip_ok"
+            fi
             printf 'Local FakeIP checks do not certify the remote XHTTP server.\n'
         else printf 'LTE health: %s/3\nProxy DoH: %s/3\nRouter DNS: %s/3\n' "$health_ok" "$proxy_ok" "$dns_ok"; fi
         printf '\nThree fresh probes only; no long-term RF/speed or package-download certification.\n'

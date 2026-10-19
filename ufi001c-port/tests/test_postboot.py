@@ -37,7 +37,8 @@ elif name == 'uci':
     assert len(a)==3 and a[:2]==['-q','get'], 'UCI mutation forbidden: '+repr(a)
     vals = {'network.modem.allowedmode':'4g','network.modem.allowedbands':s['target'],
       'network.modem.auto':'1','network.modem.autoconnect':'1','network.modem.defaultroute':'1',
-      'podkop.settings.config_path':'/tmp/'+secret+'.json'}
+      'podkop.settings.config_path':'/tmp/'+secret+'.json',
+      'podkop.settings.cloudflare_dns_patch':'1' if mode.startswith('clean_cloudflare') else '0'}
     out = vals.get(a[2], ''); rc = 0 if a[2] in vals else 1
 elif name == 'ubus':
     assert a==['-t','5','call','network.interface.modem','status'], a
@@ -78,6 +79,9 @@ elif name == 'dmesg':
     out = '\n'.join('[ %.3f] rflte_old.c:100 old boot event' % (i/10) for i in range(190))
     if mode=='new_rf': out+='\n[ 110.500] remoteproc remoteproc0: crash detected'
 elif name == 'sleep': pass
+elif name == 'podkop':
+    assert a == ['cloudflare_check'], a
+    rc = 1 if mode == 'clean_cloudflare_fail' else 0
 elif name == 'sing-box':
     assert a==['version'] or a==['check','-c','/tmp/'+secret+'.json'], a
     if a==['version']: out='sing-box version 1.12.test'
@@ -112,7 +116,7 @@ class PostbootCheck(unittest.TestCase):
         self.p=Path(self.temp.name); self.bin=self.p/'bin'; self.bin.mkdir()
         self.root=self.p/'reports'
         self.fake=self.p/'fake.py'; self.fake.write_text(FAKE); self.fake.chmod(0o755)
-        for name in ['mmcli','id','uci','ubus','ip','curl','dig','dmesg','sleep','sing-box','fake-boot']:
+        for name in ['mmcli','id','uci','ubus','ip','curl','dig','dmesg','sleep','sing-box','fake-boot','podkop']:
             (self.bin/name).symlink_to(self.fake)
         self.env=dict(os.environ, TEST_CASE=str(self.p),TEST_ROOT=str(self.root),TEST_SCRIPT=str(SCRIPT),
           UFI_POSTBOOT_SOURCE_ONLY='1', PATH=str(self.bin)+os.pathsep+os.environ['PATH'])
@@ -141,6 +145,28 @@ class PostbootCheck(unittest.TestCase):
             p=self.run_check(mode,mode)
             self.assertEqual(p.returncode,0,p.stdout+p.stderr)
             self.assertNotIn('\nCURRENT_BOOT_LTE_DNS_FAKEIP_OK\n',self.summary(mode))
+
+    def test_clean_cloudflare_checks_running_tunnel_instead_of_plain_upstream(self):
+        for mode in ('clean_cloudflare_ok','clean_cloudflare_fail'):
+            p=self.run_check(mode,mode)
+            self.assertEqual(p.returncode,0,p.stdout+p.stderr)
+            calls=json.loads((self.p/'state.json').read_text())['calls']
+            self.assertEqual(sum(c==['podkop','cloudflare_check'] for c in calls),3)
+            self.assertFalse(any(c[:2]==['dig','@77.88.8.8'] for c in calls))
+            self.assertIn('Cloudflare DoH via proxy: '+('3' if mode.endswith('_ok') else '0')+'/3', self.summary(mode))
+            if mode.endswith('_ok'):
+                self.assertIn('\nCURRENT_BOOT_LTE_CLOUDFLARE_FAKEIP_OK\n',self.summary(mode))
+            else:
+                self.assertIn('\nLTE_UP_DNS_OR_PROXY_UNSTABLE\n',self.summary(mode))
+
+    def test_clean_version_detection_accepts_both_clean_releases(self):
+        source=SCRIPT.read_text().replace('/etc/ufi001c-release',str(self.p/'release'))
+        for release, expected in (('UFI001C v3.2.1 Clean / OpenWrt 25.12.5',0),
+                                  ('UFI001C v3.2.2 Clean / OpenWrt 25.12.5',0),
+                                  ('UFI001C v3.2.0 Final Candidate / OpenWrt 25.12.5',1)):
+            (self.p/'release').write_text(release+'\n')
+            p=subprocess.run(['sh','-c',source+'\nclean_profile'],env=self.env,capture_output=True,text=True)
+            self.assertEqual(p.returncode,expected,p.stderr)
 
     def summary(self, token='test-run'):
         return (self.root/f'run-{token}'/'report'/'SUMMARY.txt').read_text()

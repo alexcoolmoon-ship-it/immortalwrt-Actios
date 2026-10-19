@@ -1,4 +1,6 @@
 config settings 'settings'
+        option cloudflare_dns_patch '1'
+        option cloudflare_dns_section ''
         option dns_type 'tcp'
         option dns_server '77.88.8.8'
         option bootstrap_dns_server '77.88.8.8'

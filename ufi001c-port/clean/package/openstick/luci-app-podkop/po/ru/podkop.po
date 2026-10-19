@@ -823,3 +823,39 @@ msgstr "Секретный ключ YACD"
 
 msgid "You can select Output Network Interface, by default autodetect"
 msgstr "Вы можете выбрать выходной сетевой интерфейс, по умолчанию он определяется автоматически."
+
+msgid "Cloudflare DoH via proxy"
+msgstr "Cloudflare DoH через прокси"
+
+msgid "Use Yandex 77.88.8.8 over TCP only to resolve proxy hostnames, then send DNS to Cloudflare 1.1.1.1 over HTTPS through the proxy."
+msgstr "Яндекс 77.88.8.8 по TCP используется только для адресов прокси. Основные DNS-запросы идут к Cloudflare 1.1.1.1 по HTTPS через прокси."
+
+msgid "Proxy section for Cloudflare"
+msgstr "Секция прокси для Cloudflare"
+
+msgid "Automatic selects the configured dns_only proxy section, or the first configured proxy section."
+msgstr "Автовыбор: настроенная прокси-секция dns_only или первая настроенная прокси-секция."
+
+msgid "Automatic"
+msgstr "Автоматически"
+
+msgid "Cloudflare DNS check"
+msgstr "Проверка DNS Cloudflare"
+
+msgid "Save and apply settings first. This checks a real Cloudflare DNS response through the running proxy."
+msgstr "Сначала сохраните и примените настройки. Кнопка проверяет настоящий DNS-ответ Cloudflare через работающий прокси."
+
+msgid "Check Cloudflare"
+msgstr "Проверить Cloudflare"
+
+msgid "Cloudflare mode is not applied. Save and apply settings, then check again."
+msgstr "Режим Cloudflare не применён. Сохраните и примените настройки, затем повторите проверку."
+
+msgid "Cloudflare DoH through the proxy: working."
+msgstr "Cloudflare DoH через прокси работает."
+
+msgid "Cloudflare did not answer through the proxy. Check that Podkop is running and the selected proxy section is working."
+msgstr "Cloudflare не ответил через прокси. Проверьте, что Podkop запущен и выбранная прокси-секция работает."
+
+msgid "Cloudflare check could not complete. Check that Podkop is running and try again."
+msgstr "Не удалось завершить проверку Cloudflare. Проверьте, что Podkop запущен, и повторите проверку."

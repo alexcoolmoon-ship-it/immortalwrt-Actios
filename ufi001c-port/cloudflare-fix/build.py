@@ -8,7 +8,7 @@ import zipfile
 
 HERE = Path(__file__).resolve().parent
 PORT = HERE.parent
-BASE = PORT / 'clean/package/openstick/podkop/files/usr/bin/podkop'
+BASE = HERE / 'podkop-v3.2.1'
 
 
 def once(text, old, new):
