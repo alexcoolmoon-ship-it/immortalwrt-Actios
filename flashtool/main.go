@@ -127,7 +127,8 @@ func main() {
 	// ── 步骤 3：备份基带 + 刷底层固件 ────────────────────────────
 	printSection("备份基带 + 刷入底层固件 [2/3]")
 
-	if err := os.MkdirAll(backupDir, 0755); err != nil {
+	// NV data belongs to this user. Refuse an existing timestamp directory.
+	if err := os.Mkdir(backupDir, 0700); err != nil {
 		fatal("无法创建备份目录：" + err.Error())
 	}
 

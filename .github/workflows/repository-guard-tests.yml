@@ -8,9 +8,15 @@ on:
       - "flashtool/**"
       - "files/etc/cardswitch/**"
       - "build_setup_fix.py"
+      - "check_rootfs.py"
+      - "ufi001c-port/check_rootfs.py"
       - "ufi001c-port/hotfix/**"
+      - "工具与脚本/gen_config.py"
+      - "config/**"
+      - "scripts/imm410_workflow.py"
       - "tests/repository/**"
       - ".github/workflows/repository-guard-tests.yml"
+      - ".github/workflows/Build_高通410 imm.yml"
   workflow_dispatch:
 
 permissions:
@@ -25,9 +31,13 @@ jobs:
       - name: Install compiler, USB headers and target shell
         run: |
           sudo apt-get update
-          sudo apt-get install -y golang-go libusb-1.0-0-dev pkg-config busybox-static android-sdk-libsparse-utils
+          sudo apt-get install -y golang-go libusb-1.0-0-dev pkg-config busybox-static android-sdk-libsparse-utils python3-yaml
       - name: Run shell and package-entry regressions
-        run: python3 -m unittest discover -s tests/repository -v
+        run: /usr/bin/python3 -m unittest discover -s tests/repository -v
+      - name: Validate auxiliary and regression workflow syntax
+        run: |
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -shellcheck= -pyflakes= \
+            '.github/workflows/Build_高通410 imm.yml' .github/workflows/repository-guard-tests.yml
       - name: Resolve the pinned USB module
         working-directory: flashtool
         run: go mod tidy

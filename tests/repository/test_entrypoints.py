@@ -113,5 +113,48 @@ class SetupEntryPointTests(unittest.TestCase):
             self.assertTrue((dest/'START-CHECK.cmd').is_file())
 
 
+class RootfsEntryPointTests(unittest.TestCase):
+    def test_root_wrapper_uses_current_clean_verifier_outside_cwd(self):
+        with tempfile.TemporaryDirectory() as work:
+            repo = Path(work)/'repo'; repo.mkdir()
+            port = repo/'ufi001c-port'; port.mkdir()
+            shutil.copyfile(ROOT/'check_rootfs.py', repo/'check_rootfs.py')
+            shutil.copyfile(ROOT/'ufi001c-port/check_rootfs.py', port/'check_rootfs.py')
+            assembled = Path(work)/'build/build_dir/target-fixture/root-msm89xx'
+            source_files = {
+                'lib/netifd/proto/modemmanager.sh': 'overlay/package/openstick/modemmanager/files/lib/netifd/proto/modemmanager.sh',
+                'etc/uci-defaults/99-ufi001c': 'overlay/package/openstick/ufi001c-defaults/files/99-ufi001c',
+                'etc/init.d/hotplug-gcreboot': 'overlay/package/openstick/gc/files/hotplug-gcreboot.init',
+                'etc/hotplug.d/gcrestart/restart_gc.sh': 'overlay/package/openstick/gc/files/restart_gc.sh',
+                'etc/config/gc': 'overlay/package/openstick/gc/files/gc.uci',
+                'etc/ufi001c-release': 'clean/ufi001c-release',
+                'etc/init.d/sing-box': 'overlay/package/openstick/podkop-engine/files/sing-box.init',
+                'etc/uci-defaults/99-ufi001c-addons': 'clean/99-ufi001c-addons',
+                'www/luci-static/resources/view/podkop/main.js': 'clean/package/openstick/luci-app-podkop/htdocs/luci-static/resources/view/podkop/main.js',
+            }
+            for installed, source in source_files.items():
+                original, output = port/source, assembled/installed
+                original.parent.mkdir(parents=True, exist_ok=True)
+                output.parent.mkdir(parents=True, exist_ok=True)
+                data = b'FIXTURE\n' if not source.endswith('main.js') else b'__COMPILED_VERSION_VARIABLE__\n'
+                original.write_bytes(data)
+                output.write_bytes(data.replace(b'__COMPILED_VERSION_VARIABLE__', b'v0.7.24'))
+            (port/'addons.lock.json').write_text(json.dumps({'podkop': {'tag': 'v0.7.24'}}))
+            binary = assembled/'usr/libexec/ip-full'; binary.parent.mkdir(parents=True)
+            header = bytearray(20); header[:5] = b'\x7fELF\x02'; header[18:20] = b'\xb7\x00'
+            binary.write_bytes(header)
+            command = [sys.executable, str(repo/'check_rootfs.py'), str(Path(work)/'build')]
+            result = subprocess.run(command, cwd=work, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest['tools'], ['ip-full'])
+            self.assertIn('www/luci-static/resources/view/podkop/main.js', manifest['files_sha256'])
+            forbidden = assembled/'usr/lib/podkop/ufi_dns_tunnel.sh'
+            forbidden.parent.mkdir(parents=True); forbidden.write_text('LEGACY\n')
+            result = subprocess.run(command, cwd=work, capture_output=True, text=True, timeout=10)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('Unwanted service/wrapper', result.stderr)
+
+
 if __name__ == '__main__':
     unittest.main()
